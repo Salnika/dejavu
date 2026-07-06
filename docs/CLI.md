@@ -39,23 +39,32 @@ dejavu start claude --continue     # flags after the command go to the agent
 dejavu start -- bash               # any command works
 ```
 
-### `dejavu shellenv`
+### `dejavu shellenv [OPTIONS]`
 
-Print the shell line for global activation — for shells Dejavu did not launch
-(IDE integrated terminals, GUI-launched agents):
+Global activation — for shells Dejavu did not launch (IDE integrated terminals,
+GUI-launched agents).
+
+| Option | Meaning |
+|---|---|
+| _(none)_ | Print the activation line for `eval "$(dejavu shellenv)"` |
+| `--install` | Write a managed block into your shell profile(s) |
+| `--uninstall` | Remove that managed block |
+| `--shell <zsh\|bash\|sh>` | Target one shell; default for install/uninstall is all three |
 
 ```bash
-# at the END of ~/.zprofile (after e.g. `brew shellenv`):
-eval "$(dejavu shellenv)"
+dejavu shellenv --install     # ~/.zshrc, ~/.bashrc, ~/.profile
+dejavu shellenv --uninstall   # undo
+eval "$(dejavu shellenv)"      # or wire it up yourself
 ```
 
 - Generates a repo-independent shim directory (`<cache>/shims/bin`) honoring
-  the global `[intercept]` config, then prints an idempotent POSIX guard that
-  prepends it to `PATH` (safe to eval multiple times).
+  the global `[intercept]` config, then emits/writes an idempotent POSIX guard
+  that prepends it to `PATH`.
+- `--install` is idempotent: re-running updates the single managed block (never
+  duplicates it), and `--uninstall` restores the file.
 - No `DEJAVU_*` variable is needed: the repo context is rebuilt from the
   working directory of each command, and shims self-identify to prevent
   recursion.
-- Deactivate by removing the line from `~/.zprofile`.
 
 ### `dejavu init`
 

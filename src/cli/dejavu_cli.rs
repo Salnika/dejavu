@@ -32,11 +32,20 @@ pub enum DejavuCmd {
     /// Initialize the cache for the current repo (does not modify the repo).
     Init,
 
-    /// Print the shell line for global activation: eval "$(dejavu shellenv)".
-    ///
-    /// Put it at the END of ~/.zprofile (after e.g. `brew shellenv`) so the
-    /// shims stay first on PATH in IDE terminals and GUI-launched agents.
-    Shellenv,
+    /// Global activation. With no flag, prints the line for
+    /// `eval "$(dejavu shellenv)"`. With --install, writes it into your shell
+    /// profile(s) so IDE terminals and GUI-launched agents are covered.
+    Shellenv {
+        /// Write the activation block into your shell profile(s).
+        #[arg(long)]
+        install: bool,
+        /// Remove the activation block from your shell profile(s).
+        #[arg(long, conflicts_with = "install")]
+        uninstall: bool,
+        /// Which shell(s): zsh, bash, sh, or all. Default for --install/--uninstall: all.
+        #[arg(long, value_name = "SHELL")]
+        shell: Option<String>,
+    },
 
     /// Diagnose the Dejavu setup for the current repo.
     Doctor {

@@ -57,7 +57,11 @@ pub fn run(cli: Cli) -> anyhow::Result<i32> {
     match cli.command {
         DejavuCmd::Start { command } => crate::agent::launch(command),
         DejavuCmd::Init => crate::commands::init::run(),
-        DejavuCmd::Shellenv => crate::commands::shellenv::run(),
+        DejavuCmd::Shellenv {
+            install,
+            uninstall,
+            shell,
+        } => crate::commands::shellenv::run(install, uninstall, shell),
         DejavuCmd::Stats { json, all, public } => crate::commands::stats::run(json, all, public),
         DejavuCmd::Repos { json, all } => crate::commands::repos::run(json, all),
         DejavuCmd::Report { redact } => crate::commands::stats::report(redact),

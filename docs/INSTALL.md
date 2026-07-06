@@ -77,13 +77,16 @@ npm run bootstrap:cli:clean
 ## Global Activation (optional)
 
 To intercept commands in shells Dejavu did not launch — IDE integrated
-terminals, GUI-launched agents — add this at the end of `~/.zprofile`:
+terminals, GUI-launched agents — install the activation into your shell
+profiles:
 
 ```bash
-eval "$(dejavu shellenv)"
+dejavu shellenv --install      # ~/.zshrc, ~/.bashrc, ~/.profile (idempotent)
+dejavu shellenv --uninstall    # remove it
 ```
 
-Deactivate by removing the line.
+Use `--shell zsh|bash|sh` to target one shell. `dejavu shellenv` with no flag
+just prints the line for a manual `eval "$(dejavu shellenv)"`.
 
 ## Smoke Test
 

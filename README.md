@@ -120,9 +120,13 @@ run inside an app you launch from the Dock — the VS Code integrated terminal,
 Copilot agent mode, IDE extensions — activate the shims globally:
 
 ```bash
-# at the END of ~/.zprofile (after e.g. `brew shellenv`):
-eval "$(dejavu shellenv)"
+dejavu shellenv --install     # writes the activation line into your shell profiles
 ```
+
+This adds a small managed block to `~/.zshrc`, `~/.bashrc`, and `~/.profile`
+(idempotent). Target one shell with `--shell zsh|bash|sh`, and undo it with
+`dejavu shellenv --uninstall`. Prefer to wire it up yourself? `dejavu shellenv`
+(no flag) just prints the line for `eval "$(dejavu shellenv)"`.
 
 Any shell that reads your profile then resolves `npm`, `git`, `rg`, … through
 Dejavu, with no `DEJAVU_*` variable needed: the repo context is rebuilt from
