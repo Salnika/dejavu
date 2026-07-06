@@ -81,3 +81,8 @@ Include the command, OS, shell, agent, Dejavu version, and a redacted sample whe
 - Keep docs honest about what is implemented.
 - Do not add telemetry or network calls.
 - Do not put generated files in the repository.
+
+## License
+
+This project is MIT licensed. By contributing, you agree that your
+contributions are licensed under the [MIT License](LICENSE).

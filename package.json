@@ -1,6 +1,7 @@
 {
   "name": "dejavu-dev",
   "private": true,
+  "license": "MIT",
   "scripts": {
     "bootstrap:cli": "bash scripts/bootstrap-cli.sh",
     "bootstrap:cli:clean": "bash scripts/bootstrap-cli-clean.sh"

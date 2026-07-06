@@ -1,13 +1,25 @@
+# The crates.io package is `dejavucli` (the name `dejavu` is taken); the
+# library and the installed binary are still named `dejavu`.
 [package]
-name = "dejavu"
+name = "dejavucli"
 version = "0.1.0"
 edition = "2021"
+rust-version = "1.87"
 description = "Stop showing coding agents the same command output twice."
 license = "MIT"
 repository = "https://github.com/Salnika/dejavu"
 readme = "README.md"
 keywords = ["agents", "cli", "dedupe", "path", "output"]
 categories = ["command-line-utilities", "development-tools"]
+# Keep the published crate lean: non-code assets are not needed to build it.
+exclude = [
+    "demo/",
+    "docs/",
+    "packaging/",
+    "scripts/",
+    ".github/",
+    "install.sh",
+]
 
 [lib]
 name = "dejavu"

@@ -3,3 +3,5 @@ Cargo.lock.bak
 *.swp
 .DS_Store
 dejavu_v1_specs.md
+npm/vendor/
+npm/*.tgz

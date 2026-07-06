@@ -10,6 +10,8 @@ Dejavu is a PATH shim for Claude Code, Codex, Cursor agent, opencode, Aider, Gem
 - Supports common commands like npm, pnpm, yarn, git, rg, grep, pytest, cargo, go, tsc, eslint, and docker logs
 - Early benchmark: 52-55% less intercepted output in campaign 2, 87% less output in repeated local rerun loops
 
+![Dejavu demo](demo/dejavu.gif)
+
 ## Why This Exists
 
 Coding agents rerun commands constantly: tests, typechecks, `git diff`, search, logs, and build output. Most of those reruns are unchanged or only slightly changed, but the agent still rereads the full output. That wastes context and makes the next step harder to see.
@@ -33,7 +35,34 @@ The trust claim is simple: Dejavu never skips command execution. It only changes
 
 ## Installation
 
-Current source checkout:
+Install script (macOS, Linux, WSL):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Salnika/dejavu/master/install.sh | sh
+```
+
+Homebrew:
+
+```bash
+brew tap Salnika/dejavu
+brew install dejavu
+```
+
+npm / npx (the command is still `dejavu`):
+
+```bash
+npx dejavucli start -- codex   # no install
+npm install -g dejavucli       # or install globally
+```
+
+Cargo:
+
+```bash
+cargo install dejavucli
+```
+
+Prebuilt binaries for each release are on the
+[Releases page](https://github.com/Salnika/dejavu/releases). From source:
 
 ```bash
 git clone https://github.com/Salnika/dejavu
@@ -42,14 +71,7 @@ cargo install --path .
 dejavu doctor
 ```
 
-Local development wrapper:
-
-```bash
-npm run bootstrap:cli
-dejavu doctor
-```
-
-More detail: [docs/INSTALL.md](docs/INSTALL.md).
+More detail: [docs/INSTALL.md](docs/INSTALL.md). Maintainers: [docs/RELEASING.md](docs/RELEASING.md).
 
 ## Quickstart
 
@@ -256,3 +278,7 @@ High-value contributions:
 - safety reports where Dejavu compacted something it should not have compacted
 - benchmark reports from real agent sessions
 - install smoke tests on macOS, Linux, and WSL
+
+## License
+
+MIT. See [LICENSE](LICENSE).

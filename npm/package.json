@@ -1,0 +1,39 @@
+{
+  "name": "dejavucli",
+  "version": "0.1.0",
+  "description": "Stop showing coding agents the same command output twice.",
+  "bin": {
+    "dejavu": "bin/dejavu.js"
+  },
+  "scripts": {
+    "postinstall": "node install.js"
+  },
+  "files": [
+    "bin/",
+    "lib/",
+    "install.js",
+    "README.md"
+  ],
+  "keywords": [
+    "agents",
+    "cli",
+    "coding-agent",
+    "dedupe",
+    "tokens",
+    "claude",
+    "codex"
+  ],
+  "homepage": "https://github.com/Salnika/dejavu",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Salnika/dejavu.git"
+  },
+  "license": "MIT",
+  "engines": {
+    "node": ">=14"
+  },
+  "os": [
+    "darwin",
+    "linux"
+  ]
+}

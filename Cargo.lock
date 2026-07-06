@@ -246,7 +246,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "dejavu"
+name = "dejavucli"
 version = "0.1.0"
 dependencies = [
  "anyhow",
