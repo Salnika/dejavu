@@ -267,12 +267,28 @@ fn classify_git(args: &[String]) -> ExecMode {
     }
 }
 
-/// True when a git read-only invocation is meant for a program to parse rather
-/// than for a human/agent to read.
+/// True when a git read-only invocation emits a stable, machine-parseable
+/// format that a program (shell prompt, IDE SCM, git hook, or an agent's own
+/// `$(...)`/pipe/xargs) consumes. Reducing those corrupts the parser, so they
+/// pass through untouched. This is a block-list and so necessarily incomplete;
+/// we err toward passthrough (a missed optimization is harmless, a corrupted
+/// parse is not), and the min-token floor is the final backstop.
 fn is_machine_readable(args: &[String]) -> bool {
     args.iter().any(|a| {
-        a == "-z" || a == "--no-ext-diff" || a.starts_with("--porcelain") || a.contains("@{u")
-        // @{u} / @{upstream} ahead-behind ranges
+        matches!(
+            a.as_str(),
+            // stable columnar / scripting formats
+            "-z" | "-s"
+                | "--short"
+                | "--name-only"
+                | "--name-status"
+                | "--numstat"
+                | "--raw"
+                | "--no-ext-diff"
+        ) || a.starts_with("--porcelain")      // --porcelain, =v1, =v2
+            || a.starts_with("--format")        // git log/show custom format
+            || a.starts_with("--pretty=format") // --pretty=format:%H (machine)
+            || a.contains("@{u") // @{u} / @{upstream} ahead-behind ranges
     })
 }
 
@@ -401,12 +417,19 @@ mod tests {
 
     #[test]
     fn git_machine_forms_passthrough_human_forms_optimize() {
-        // Prompt / IDE SCM forms — parsed by programs, must pass through.
+        // Prompt / IDE SCM / scripting forms — parsed by programs, must pass through.
         for args in [
             &["status", "--porcelain"][..],
             &["status", "--porcelain=v2", "-z"][..],
+            &["status", "-s"][..],
+            &["status", "--short"][..],
             &["diff", "--no-ext-diff", "--ignore-submodules"][..],
+            &["diff", "--name-only"][..],
+            &["diff", "--numstat"][..],
+            &["diff", "--name-status", "--diff-filter=ACM"][..],
             &["log", "--oneline", "..@{upstream}"][..],
+            &["log", "-1", "--format=%H"][..],
+            &["log", "--pretty=format:%h %s"][..],
         ] {
             assert!(
                 matches!(mode("git", args), Passthrough(R::MachineReadable)),
@@ -417,7 +440,9 @@ mod tests {
         assert!(is_opt(&mode("git", &["status"])));
         assert!(is_opt(&mode("git", &["diff"])));
         assert!(is_opt(&mode("git", &["diff", "HEAD~1"])));
+        assert!(is_opt(&mode("git", &["diff", "--stat"])));
         assert!(is_opt(&mode("git", &["log", "--oneline", "-5"])));
+        assert!(is_opt(&mode("git", &["log", "--graph"])));
         assert!(is_opt(&mode("git", &["-C", "/tmp/r", "status"])));
     }
 
