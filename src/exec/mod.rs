@@ -54,6 +54,9 @@ pub enum PassthroughReason {
     MutatingGit,
     DangerousDocker,
     SideEffecting,
+    /// A machine-readable git form (`--porcelain`, `-z`, `@{upstream}`, …) that a
+    /// program parses — reducing it would corrupt shell prompts / IDE SCM.
+    MachineReadable,
 }
 
 impl PassthroughReason {
@@ -69,6 +72,7 @@ impl PassthroughReason {
             PassthroughReason::MutatingGit => "mutating_git",
             PassthroughReason::DangerousDocker => "dangerous_docker",
             PassthroughReason::SideEffecting => "side_effecting",
+            PassthroughReason::MachineReadable => "machine_readable",
         }
     }
 }

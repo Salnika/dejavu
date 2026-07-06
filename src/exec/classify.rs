@@ -247,14 +247,33 @@ fn git_subcommand(args: &[String]) -> Option<(usize, &str)> {
 
 fn classify_git(args: &[String]) -> ExecMode {
     match git_subcommand(args) {
-        Some((idx, sub)) if GIT_READONLY.contains(&sub) => Optimize {
-            family: Family::GitReadonly,
-            command_key: build_key(&format!("git:{sub}"), &drop_noise(&args[idx + 1..])),
-        },
+        Some((idx, sub)) if GIT_READONLY.contains(&sub) => {
+            // Machine-readable forms (`--porcelain`, `-z`, `@{upstream}` ranges,
+            // `--no-ext-diff`) are run by shell prompts and IDE SCM, which PARSE
+            // the output — reducing it would corrupt them. Pass those through and
+            // only optimize the human-readable forms an agent actually reads.
+            if is_machine_readable(&args[idx + 1..]) {
+                Passthrough(R::MachineReadable)
+            } else {
+                Optimize {
+                    family: Family::GitReadonly,
+                    command_key: build_key(&format!("git:{sub}"), &drop_noise(&args[idx + 1..])),
+                }
+            }
+        }
         Some((_, sub)) if GIT_MUTATING.contains(&sub) => Passthrough(R::MutatingGit),
         // Unknown or no subcommand → safe passthrough.
         _ => Passthrough(R::UnsupportedSubcommand),
     }
+}
+
+/// True when a git read-only invocation is meant for a program to parse rather
+/// than for a human/agent to read.
+fn is_machine_readable(args: &[String]) -> bool {
+    args.iter().any(|a| {
+        a == "-z" || a == "--no-ext-diff" || a.starts_with("--porcelain") || a.contains("@{u")
+        // @{u} / @{upstream} ahead-behind ranges
+    })
 }
 
 /// First positional for docker, skipping global options that take a value.
@@ -378,6 +397,28 @@ mod tests {
                 "git {sub} must pass through"
             );
         }
+    }
+
+    #[test]
+    fn git_machine_forms_passthrough_human_forms_optimize() {
+        // Prompt / IDE SCM forms — parsed by programs, must pass through.
+        for args in [
+            &["status", "--porcelain"][..],
+            &["status", "--porcelain=v2", "-z"][..],
+            &["diff", "--no-ext-diff", "--ignore-submodules"][..],
+            &["log", "--oneline", "..@{upstream}"][..],
+        ] {
+            assert!(
+                matches!(mode("git", args), Passthrough(R::MachineReadable)),
+                "git {args:?} must pass through (machine-readable)"
+            );
+        }
+        // Human/agent forms — still optimized.
+        assert!(is_opt(&mode("git", &["status"])));
+        assert!(is_opt(&mode("git", &["diff"])));
+        assert!(is_opt(&mode("git", &["diff", "HEAD~1"])));
+        assert!(is_opt(&mode("git", &["log", "--oneline", "-5"])));
+        assert!(is_opt(&mode("git", &["-C", "/tmp/r", "status"])));
     }
 
     #[test]

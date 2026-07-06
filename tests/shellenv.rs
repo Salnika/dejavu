@@ -10,10 +10,12 @@ fn shellenv_generates_global_shims_and_activates_interception() {
     let home = tempfile::tempdir().unwrap();
     let fake = tempfile::tempdir().unwrap();
     let proj = tempfile::tempdir().unwrap();
+    // Large, deterministic output so reduction actually engages (a tiny output
+    // passes through raw and would never show the "unchanged" envelope).
     write_exec(
         fake.path(),
         "pnpm",
-        "#!/bin/sh\necho global shim ok\nexit 0\n",
+        "#!/bin/sh\ni=1\nwhile [ \"$i\" -le 200 ]; do echo \"validation line $i stable output padding content\"; i=$((i+1)); done\nexit 0\n",
     );
 
     // 1. shellenv prints the idempotent PATH guard and creates the shims.
@@ -65,9 +67,10 @@ fn shellenv_generates_global_shims_and_activates_interception() {
         .unwrap();
     assert!(out.status.success());
     let text = String::from_utf8_lossy(&out.stdout);
-    // First run passes through raw (small output); second is deduplicated.
-    assert!(text.contains("global shim ok"));
-    assert!(text.contains("unchanged"));
+    // Interception works with no DEJAVU_* env: the second identical run is
+    // deduplicated into an "unchanged" envelope for `pnpm test`.
+    assert!(text.contains("pnpm test"), "output: {text}");
+    assert!(text.contains("unchanged"), "output: {text}");
 }
 
 #[test]

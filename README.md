@@ -221,7 +221,7 @@ Dejavu defaults to passthrough. It optimizes only command shapes it recognizes a
 | Tests | `pytest`, `cargo test`, `go test` |
 | Search | `rg`, `grep` |
 | Files and trees | `find` without side-effecting primaries, `ls`, `tree` |
-| Git read-only | `git status`, `git diff`, `git log`, `git show` |
+| Git read-only | `git status`, `git diff`, `git log`, `git show` (human forms only — machine forms like `--porcelain`, `-z`, `@{upstream}` pass through so shell prompts and IDE SCM keep parsing them) |
 | Logs | `docker logs`, `docker compose logs` |
 
 Examples of commands that pass through unchanged:

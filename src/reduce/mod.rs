@@ -149,8 +149,11 @@ fn build_emit(
 ) -> Emit {
     use Classification::*;
 
-    // Small first-seen output: emit raw, no envelope (avoid negative savings).
-    if classification == FirstSeen && raw_tokens < cfg.min_raw_tokens_to_reduce as i64 {
+    // Below the reduction threshold, emit the raw output with no envelope — for
+    // ANY classification. Wrapping a tiny output in a "dejavu: unchanged since…"
+    // envelope would emit more tokens than it saves and, worse, would hand
+    // corrupted output to any program that parses it (shell prompts, IDE SCM).
+    if raw_tokens < cfg.min_raw_tokens_to_reduce as i64 {
         return Emit {
             emitted_tokens: raw_tokens,
             saved_tokens: 0,

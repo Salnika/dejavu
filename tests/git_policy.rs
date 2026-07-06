@@ -14,7 +14,7 @@ while [ \"$#\" -gt 0 ]; do case \"$1\" in -C) DIR=\"$2\"; shift 2;; -c) shift 2;
 sub=\"${1:-}\"; [ \"$#\" -gt 0 ] && shift\n\
 case \"$sub\" in\n\
   rev-parse) [ \"${1:-}\" = \"--show-toplevel\" ] && { echo \"$DIR\"; exit 0; }; exit 128;;\n\
-  diff) printf 'diff --git a/x b/x\\n--- a/x\\n+++ b/x\\n@@ -1 +1 @@\\n-a\\n+b\\n'; exit 0;;\n\
+  diff) printf 'diff --git a/x b/x\\n--- a/x\\n+++ b/x\\n@@ -1,120 +1,120 @@\\n'; i=1; while [ \"$i\" -le 120 ]; do printf '%s\\n' \"-old line $i padding xxxxxxxxxxxxxxxxxxxxxxxxxxxx\" \"+new line $i padding yyyyyyyyyyyyyyyyyyyyyyyyyyyy\"; i=$((i+1)); done; exit 0;;\n\
   commit) echo 'MUTATING-COMMIT-RAN'; exit 0;;\n\
   *) exit 0;; esac\n";
 
