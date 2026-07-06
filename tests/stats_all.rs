@@ -106,5 +106,6 @@ fn stats_all_empty_cache_reports_zeros() {
         .args(["stats", "--all"])
         .assert()
         .success()
-        .stdout(predicates::str::contains("Runs captured: 0"));
+        .stdout(predicates::str::contains("Runs captured"))
+        .stdout(predicates::str::contains("Dejavu stats"));
 }

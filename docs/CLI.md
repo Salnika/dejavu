@@ -136,6 +136,26 @@ dejavu stats --all
 dejavu stats --all --public --json
 ```
 
+### `dejavu repos [OPTIONS]`
+
+List repos where Dejavu has recorded activity. By default, only repos that are
+not disabled with `dejavu disable` are shown.
+
+| Option | Meaning |
+|---|---|
+| `--json` | Emit the repo list as JSON instead of text |
+| `--all` | Include repos disabled with `dejavu disable` |
+
+Each row includes the repo path, status (`active` or `disabled`), run count,
+session count, estimated saved tokens, latest activity timestamp, and cache
+directory.
+
+```bash
+dejavu repos
+dejavu repos --all
+dejavu repos --all --json
+```
+
 ### `dejavu report [OPTIONS]`
 
 Emit a Markdown report for the current repo, suitable for sharing.

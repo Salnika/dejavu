@@ -351,14 +351,41 @@ impl Db {
 
     /// Distinct repo roots recorded in this database (normally one per cache).
     pub fn repo_roots(&self) -> Result<Vec<String>, StoreError> {
-        let mut stmt = self
-            .conn
-            .prepare("SELECT DISTINCT repo_root FROM runs ORDER BY repo_root")?;
+        let mut stmt = self.conn.prepare(
+            "SELECT repo_root FROM (
+                SELECT DISTINCT repo_root FROM runs
+                UNION
+                SELECT DISTINCT repo_root FROM sessions
+             )
+             ORDER BY repo_root",
+        )?;
         let rows = stmt.query_map([], |row| row.get::<_, String>(0))?;
         let mut out = Vec::new();
         for row in rows {
             out.push(row?);
         }
         Ok(out)
+    }
+
+    pub fn session_count(&self, repo_root: &str) -> Result<i64, StoreError> {
+        let count = self.conn.query_row(
+            "SELECT COUNT(*) FROM sessions WHERE repo_root = ?1",
+            [repo_root],
+            |r| r.get(0),
+        )?;
+        Ok(count)
+    }
+
+    pub fn latest_activity(&self, repo_root: &str) -> Result<Option<String>, StoreError> {
+        let latest = self.conn.query_row(
+            "SELECT MAX(created_at) FROM (
+                SELECT created_at FROM runs WHERE repo_root = ?1
+                UNION ALL
+                SELECT created_at FROM sessions WHERE repo_root = ?1
+             )",
+            [repo_root],
+            |r| r.get(0),
+        )?;
+        Ok(latest)
     }
 }

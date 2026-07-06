@@ -9,6 +9,8 @@ use crate::store::{write_logs, Db, RunRecord};
 use crate::util;
 use std::time::Instant;
 
+use super::{fmt_int, render};
+
 struct Step {
     family: &'static str,
     shim: &'static str,
@@ -253,24 +255,42 @@ fn report(name: &str, t: &Totals, json: bool) -> anyhow::Result<i32> {
         return Ok(0);
     }
 
-    use super::fmt_int;
-    println!("Dejavu benchmark\n");
-    println!("Scenario: {name}\n");
-    println!("Without Dejavu:");
-    println!("- raw output: {} bytes", fmt_int(t.raw_bytes));
-    println!("- estimated tokens: {}", fmt_int(t.raw_tokens));
-    println!("\nWith Dejavu:");
-    println!("- emitted output: {} bytes", fmt_int(t.emitted_bytes));
-    println!("- estimated tokens: {}", fmt_int(t.emitted_tokens));
-    println!("\nEstimated savings:");
-    println!("- {} tokens", fmt_int(saved));
-    println!("- {reduction:.1}% reduction");
-    println!("\nAverage overhead:");
-    println!("- {avg_overhead:.0}ms per command");
-    println!("\nStates covered: {}", t.states.join(", "));
-    println!("Fail -> pass observed: {}", t.fail_to_pass);
-    println!("\nQuality:");
-    println!("- full output requested: 0.0%");
-    println!("- internal fallback: 0.0%");
+    render::title("Dejavu benchmark");
+    render::kv(&[("Scenario", name.to_string())]);
+
+    render::section("Output");
+    render::table(
+        &["Mode", "Bytes", "Estimated tokens"],
+        &[
+            vec![
+                "Without Dejavu".to_string(),
+                fmt_int(t.raw_bytes),
+                fmt_int(t.raw_tokens),
+            ],
+            vec![
+                "With Dejavu".to_string(),
+                fmt_int(t.emitted_bytes),
+                fmt_int(t.emitted_tokens),
+            ],
+        ],
+    );
+
+    render::section("Savings");
+    render::kv(&[
+        ("Estimated tokens saved", fmt_int(saved)),
+        ("Reduction", format!("{reduction:.1}%")),
+        (
+            "Average overhead",
+            format!("{avg_overhead:.0}ms per command"),
+        ),
+        ("States covered", t.states.join(", ")),
+        ("Fail -> pass observed", t.fail_to_pass.to_string()),
+    ]);
+
+    render::section("Quality");
+    render::kv(&[
+        ("Full output requested", "0.0%".to_string()),
+        ("Internal fallback", "0.0%".to_string()),
+    ]);
     Ok(0)
 }

@@ -1,7 +1,7 @@
 //! `dejavu stats` — token-savings report for the current repo (spec §17.6),
 //! or across every tracked repo with `--all`.
 
-use super::fmt_int;
+use super::{fmt_int, render};
 use crate::cli::AppCtx;
 use crate::store::{Db, StatsAgg};
 use std::collections::BTreeMap;
@@ -238,56 +238,148 @@ fn render(
         return Ok(0);
     }
 
-    println!("Dejavu stats for {scope}\n");
-    println!("Commands intercepted: {}", agg.runs_captured);
-    println!("Runs captured: {}", agg.runs_captured);
-    println!("Full outputs stored: {}", agg.optimized);
-    println!("Compact outputs returned: {}", agg.optimized);
-    println!("Optimized runs: {}", agg.optimized);
-    println!("Unchanged outputs: {}", agg.unchanged);
-    println!("Small deltas: {}", agg.small_delta);
-    println!("Large deltas: {}", agg.large_delta);
-    println!("Passthrough: {}", agg.passthrough);
-    println!();
-    println!("Estimated raw tokens: {}", fmt_int(agg.raw_tokens));
-    println!("Estimated emitted tokens: {}", fmt_int(agg.emitted_tokens));
-    println!("Estimated saved tokens: {}", fmt_int(agg.saved_tokens));
-    println!(
-        "Estimated output tokens suppressed: {}",
-        fmt_int(agg.saved_tokens)
+    render::title("Dejavu stats");
+    let mut scope_rows = vec![("Scope", scope.to_string())];
+    if repos_tracked > 0 || repos_unreadable > 0 {
+        scope_rows.push(("Repos tracked", repos_tracked.to_string()));
+        scope_rows.push(("Repos unreadable", repos_unreadable.to_string()));
+    }
+    render::kv(&scope_rows);
+
+    render::section("Runs");
+    render::table(
+        &["Metric", "Value"],
+        &[
+            vec![
+                "Commands intercepted".to_string(),
+                agg.runs_captured.to_string(),
+            ],
+            vec!["Runs captured".to_string(), agg.runs_captured.to_string()],
+            vec!["Full outputs stored".to_string(), agg.optimized.to_string()],
+            vec![
+                "Compact outputs returned".to_string(),
+                agg.optimized.to_string(),
+            ],
+            vec!["Optimized runs".to_string(), agg.optimized.to_string()],
+            vec![
+                "Unchanged outputs (higher = better)".to_string(),
+                agg.unchanged.to_string(),
+            ],
+            vec!["Small deltas".to_string(), agg.small_delta.to_string()],
+            vec!["Large deltas".to_string(), agg.large_delta.to_string()],
+            vec!["Passthrough".to_string(), agg.passthrough.to_string()],
+        ],
     );
-    println!("Reduction on intercepted outputs: {reduction:.1}%");
-    println!();
-    println!("Quality:");
-    println!(
-        "Full-output requests: {} ({full_ratio:.1}%)",
-        agg.full_output_requested
+
+    render::section("Tokens");
+    render::table(
+        &["Metric", "Value"],
+        &[
+            vec!["Estimated raw tokens".to_string(), fmt_int(agg.raw_tokens)],
+            vec![
+                "Estimated emitted tokens".to_string(),
+                fmt_int(agg.emitted_tokens),
+            ],
+            vec![
+                "Estimated saved tokens (higher = better)".to_string(),
+                fmt_int(agg.saved_tokens),
+            ],
+            vec![
+                "Estimated output tokens suppressed".to_string(),
+                fmt_int(agg.saved_tokens),
+            ],
+        ],
     );
-    println!("Internal fallback: {fallback_ratio:.1}%");
-    println!("Average overhead: {:.0}ms", agg.avg_overhead_ms);
+    println!();
+    println!(
+        "{}",
+        render::meter("Reduction on intercepted outputs", reduction)
+    );
+
+    render::section("Quality");
+    render::table(
+        &["Metric", "Value"],
+        &[
+            vec![
+                "Full-output requests (lower = better)".to_string(),
+                format!("{} ({full_ratio:.1}%)", agg.full_output_requested),
+            ],
+            vec![
+                "Internal fallback (lower = better)".to_string(),
+                format!("{fallback_ratio:.1}%"),
+            ],
+            vec![
+                "Average overhead (lower = better)".to_string(),
+                format!("{:.0}ms", agg.avg_overhead_ms),
+            ],
+        ],
+    );
     if public {
         println!("\nPublic mode: repo paths and command details omitted.");
     }
 
     if !top.is_empty() {
-        println!("\nTop savings:");
-        for (cmd, saved) in top {
-            println!("- {cmd}: {} tokens saved", fmt_int(*saved));
-        }
+        render::section("Top savings");
+        let rows: Vec<Vec<String>> = top
+            .iter()
+            .map(|(cmd, saved)| vec![fmt_int(*saved), cmd.clone()])
+            .collect();
+        render::table_styled(
+            &["Saved tokens", "Command"],
+            &rows,
+            &[render::Style::Green, render::Style::Cyan],
+        );
     }
     if !repos.is_empty() {
-        println!("\nPer repo:");
-        for r in repos {
-            println!(
-                "- {}: {} tokens saved ({:.1}%, {} runs)",
-                r.repo,
-                fmt_int(r.saved),
-                pct(r.saved, r.raw),
-                r.runs
+        render::section("Per repo");
+        let paths: Vec<&str> = repos.iter().map(|r| r.repo.as_str()).collect();
+        let names = short_repo_names(&paths);
+        for (r, name) in repos.iter().zip(names) {
+            render::record(
+                render::Style::Green,
+                &name,
+                &[
+                    format!("{} runs", r.runs),
+                    format!("{} tokens saved", fmt_int(r.saved)),
+                    format!("{:.1}% reduction", pct(r.saved, r.raw)),
+                ],
             );
         }
     }
     Ok(0)
+}
+
+/// Short display names for repo paths: the last path component, extended with
+/// parent components until every name in the list is unique — ten benchmark
+/// repos all named `proj` must not collapse into one label. The full path
+/// stays available in `--json` and `dejavu repos`.
+fn short_repo_names(paths: &[&str]) -> Vec<String> {
+    let comps: Vec<Vec<&str>> = paths
+        .iter()
+        .map(|p| p.split('/').filter(|c| !c.is_empty()).collect())
+        .collect();
+    let mut depth: Vec<usize> = vec![1; paths.len()];
+    loop {
+        let names: Vec<String> = comps
+            .iter()
+            .zip(&depth)
+            .map(|(c, d)| c[c.len().saturating_sub(*d)..].join("/"))
+            .collect();
+        let mut grew = false;
+        for i in 0..names.len() {
+            let colliding = names
+                .iter()
+                .enumerate()
+                .any(|(j, n)| j != i && n == &names[i]);
+            if colliding && depth[i] < comps[i].len() {
+                depth[i] += 1;
+                grew = true;
+            }
+        }
+        if !grew {
+            return names;
+        }
+    }
 }
 
 pub fn report(redact: bool) -> anyhow::Result<i32> {
@@ -365,4 +457,26 @@ pub fn report(redact: bool) -> anyhow::Result<i32> {
     println!("- Full command output logs are not included in this report.");
     println!("- Token counts are estimates using Dejavu's configured estimator.");
     Ok(0)
+}
+#[cfg(test)]
+mod tests {
+    use super::short_repo_names;
+
+    #[test]
+    fn short_names_disambiguate_colliding_basenames() {
+        let names = short_repo_names(&[
+            "/tmp/bench/runs/codex_low_dv_r1/proj",
+            "/tmp/bench/runs/codex_xhigh_dv_r2/proj",
+            "/home/alexis/work/dejavu",
+        ]);
+        assert_eq!(names[0], "codex_low_dv_r1/proj");
+        assert_eq!(names[1], "codex_xhigh_dv_r2/proj");
+        assert_eq!(names[2], "dejavu");
+    }
+
+    #[test]
+    fn short_names_stay_short_when_unique() {
+        let names = short_repo_names(&["/a/b/alpha", "/a/b/beta"]);
+        assert_eq!(names, vec!["alpha", "beta"]);
+    }
 }

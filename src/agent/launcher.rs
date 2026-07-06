@@ -70,10 +70,11 @@ pub fn launch(mut command: Vec<String>) -> anyhow::Result<i32> {
     let current_path = std::env::var_os("PATH").unwrap_or_default();
     let child_path = prepend_dedup(&layout.shims_bin(), &current_path);
 
-    eprintln!("Dejavu active.");
-    eprintln!("Repo: {}", repo_root.display());
-    eprintln!("Shims: {shim_count} commands");
-    eprintln!("Cache: {}", layout.root.display());
+    eprintln!("Dejavu active");
+    eprintln!("=============");
+    eprintln!("Repo   {}", repo_root.display());
+    eprintln!("Shims  {shim_count} commands");
+    eprintln!("Cache  {}", layout.root.display());
 
     let program = &command[0];
     let mut cmd = Command::new(program);

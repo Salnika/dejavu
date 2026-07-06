@@ -177,6 +177,7 @@ Useful checks:
 ```bash
 dejavu doctor
 dejavu doctor --json
+dejavu repos
 dejavu show latest --stdout
 dejavu uninstall
 ```

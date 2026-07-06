@@ -95,6 +95,16 @@ pub enum DejavuCmd {
         public: bool,
     },
 
+    /// List repos where Dejavu has recorded activity.
+    Repos {
+        /// Emit the repo list as JSON instead of text.
+        #[arg(long)]
+        json: bool,
+        /// Include repos disabled with `dejavu disable`.
+        #[arg(long)]
+        all: bool,
+    },
+
     /// Emit a Markdown report suitable for sharing.
     Report {
         /// Omit repo paths and command details that may contain private names.

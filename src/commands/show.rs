@@ -1,6 +1,6 @@
 //! `dejavu show` — reprint a captured run (spec §17.4).
 
-use super::resolve_target;
+use super::{render, resolve_target};
 use crate::cli::AppCtx;
 use crate::store::Db;
 use crate::util::short_id;
@@ -28,7 +28,7 @@ pub fn run(target: &str, stdout: bool, stderr: bool, normalized: bool) -> anyhow
 
     // Default: a metadata block, plus the stored compact summary if present.
     let short = short_id(&run.id);
-    println!("dejavu: run {short}");
+    render::title(&format!("Dejavu run {short}"));
     println!("Command: {}", run.command_original);
     println!("Exit code: {}", run.exit_code);
     println!("Classification: {}", run.classification);
@@ -38,9 +38,11 @@ pub fn run(target: &str, stdout: bool, stderr: bool, normalized: bool) -> anyhow
     );
     if let Some(summary) = &run.summary {
         if !summary.trim().is_empty() {
-            println!("\n{summary}");
+            render::section("Compact output");
+            println!("{summary}");
         }
     }
+    render::section("Recovery");
     println!("Full output: dejavu show {short} --stdout");
     Ok(0)
 }

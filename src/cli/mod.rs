@@ -2,6 +2,7 @@
 
 pub mod dejavu_cli;
 
+use crate::commands::render;
 use crate::config::Config;
 use crate::env::{self, AgentEnv};
 use crate::paths::CacheLayout;
@@ -58,6 +59,7 @@ pub fn run(cli: Cli) -> anyhow::Result<i32> {
         DejavuCmd::Init => crate::commands::init::run(),
         DejavuCmd::Shellenv => crate::commands::shellenv::run(),
         DejavuCmd::Stats { json, all, public } => crate::commands::stats::run(json, all, public),
+        DejavuCmd::Repos { json, all } => crate::commands::repos::run(json, all),
         DejavuCmd::Report { redact } => crate::commands::stats::report(redact),
         DejavuCmd::Enable => set_repo_disabled(false),
         DejavuCmd::Disable => set_repo_disabled(true),
@@ -86,10 +88,11 @@ fn set_repo_disabled(disabled: bool) -> anyhow::Result<i32> {
     let mut st = state::load(&ctx.layout);
     st.disabled = disabled;
     state::save(&ctx.layout, &st)?;
-    println!(
-        "Dejavu {} for repo: {}",
-        if disabled { "disabled" } else { "enabled" },
-        ctx.repo_root.display()
-    );
+    render::title(if disabled {
+        "Dejavu disabled"
+    } else {
+        "Dejavu enabled"
+    });
+    render::kv(&[("Repo", ctx.repo_root.display().to_string())]);
     Ok(0)
 }

@@ -1,7 +1,7 @@
 //! `dejavu clean` — remove cached runs and logs (spec §17.8). Never touches the
 //! repo.
 
-use super::fmt_int;
+use super::{fmt_int, render};
 use crate::cli::AppCtx;
 use crate::store::Db;
 use chrono::{Duration, Utc};
@@ -11,10 +11,8 @@ pub fn run(older_than: Option<String>, all: bool) -> anyhow::Result<i32> {
 
     if all {
         remove_repo_cache(&ctx)?;
-        println!(
-            "Removed Dejavu cache for this repo: {}",
-            ctx.layout.root.display()
-        );
+        render::title("Dejavu cache removed");
+        render::kv(&[("Cache", ctx.layout.root.display().to_string())]);
         return Ok(0);
     }
 
@@ -43,22 +41,25 @@ pub fn run(older_than: Option<String>, all: bool) -> anyhow::Result<i32> {
     }
     let deleted = db.delete_runs_before(&repo, &cutoff)?;
 
-    println!(
-        "Removed {deleted} runs older than {}, freeing {} bytes.",
-        humanize(duration),
-        fmt_int(bytes_freed as i64)
-    );
+    render::title("Dejavu cleanup");
+    render::kv(&[
+        ("Repo", ctx.repo_root.display().to_string()),
+        ("Removed runs", deleted.to_string()),
+        ("Older than", humanize(duration)),
+        ("Bytes freed", fmt_int(bytes_freed as i64)),
+    ]);
     Ok(0)
 }
 
 pub fn uninstall() -> anyhow::Result<i32> {
     let ctx = AppCtx::resolve()?;
     remove_repo_cache(&ctx)?;
-    println!(
-        "Removed Dejavu cache and generated shims for this repo: {}",
-        ctx.layout.root.display()
-    );
-    println!("The dejavu binary was not removed. To remove it, run: cargo uninstall dejavu");
+    render::title("Dejavu uninstalled for repo");
+    render::kv(&[
+        ("Cache", ctx.layout.root.display().to_string()),
+        ("Binary", "not removed".to_string()),
+        ("Remove binary", "cargo uninstall dejavu".to_string()),
+    ]);
     Ok(0)
 }
 

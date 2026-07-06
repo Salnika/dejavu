@@ -5,6 +5,8 @@ pub mod clean;
 pub mod doctor;
 pub mod grep;
 pub mod init;
+pub mod render;
+pub mod repos;
 pub mod shellenv;
 pub mod show;
 pub mod stats;

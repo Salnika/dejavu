@@ -1,6 +1,7 @@
 //! `dejavu doctor` — diagnose the setup for the current repo (spec §17.3).
 
 use crate::cli::AppCtx;
+use crate::commands::render;
 use crate::env;
 use crate::exec::path::split_path;
 use crate::exec::resolve::{resolve_real, ResolveEnv};
@@ -230,15 +231,18 @@ pub fn run(json: bool) -> anyhow::Result<i32> {
     if json {
         println!("{}", serde_json::to_string_pretty(&checks)?);
     } else {
-        println!("Dejavu doctor — repo: {}", ctx.repo_root.display());
-        for c in &checks {
-            let mark = match c.status {
-                "ok" => "ok  ",
-                "warn" => "warn",
-                _ => "FAIL",
-            };
-            println!("[{mark}] {}: {}", c.name, c.detail);
-        }
+        render::title("Dejavu doctor");
+        render::kv(&[("Repo", ctx.repo_root.display().to_string())]);
+        render::section("Checks");
+        let rows: Vec<Vec<String>> = checks
+            .iter()
+            .map(|c| vec![c.status.to_string(), c.name.to_string(), c.detail.clone()])
+            .collect();
+        render::table_styled(
+            &["Status", "Check", "Detail"],
+            &rows,
+            &[render::Style::Status],
+        );
     }
     Ok(if any_fail { 2 } else { 0 })
 }
