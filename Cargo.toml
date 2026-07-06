@@ -2,7 +2,7 @@
 # library and the installed binary are still named `dejavu`.
 [package]
 name = "dejavucli"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 rust-version = "1.87"
 description = "Stop showing coding agents the same command output twice."
