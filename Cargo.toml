@@ -1,8 +1,8 @@
-# The crates.io package is `dejavucli` (the name `dejavu` is taken); the
+# The crates.io package is `dejavu-cli` (the name `dejavu` is taken); the
 # library and the installed binary are still named `dejavu`.
 [package]
-name = "dejavucli"
-version = "0.2.0"
+name = "dejavu-cli"
+version = "0.2.1"
 edition = "2021"
 rust-version = "1.87"
 description = "Stop showing coding agents the same command output twice."

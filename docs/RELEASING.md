@@ -37,7 +37,7 @@ absent, so you can enable each channel when you are ready.
 | Secret | Enables | How to create |
 |---|---|---|
 | `CARGO_REGISTRY_TOKEN` | crates.io publish | crates.io → Account Settings → API Tokens (scope: publish-update) |
-| `NPM_TOKEN` | npm publish (`npx dejavucli`) | npmjs.com → Access Tokens → Generate (Automation / publish) |
+| `NPM_TOKEN` | npm publish (`npx @salnika/dejavu`) | npmjs.com → Access Tokens → Generate (Automation / publish) |
 | `HOMEBREW_TAP_TOKEN` | Homebrew tap update | A fine-grained PAT with **Contents: read/write** on `Salnika/homebrew-dejavu` |
 
 The npm launcher package lives in [`npm/`](../npm); its version is set from the

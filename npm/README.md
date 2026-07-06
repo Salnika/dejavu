@@ -1,4 +1,4 @@
-# dejavucli
+# @salnika/dejavu
 
 Stop showing coding agents the same command output twice.
 
@@ -10,13 +10,13 @@ installed command is `dejavu`.
 ## Use without installing
 
 ```bash
-npx dejavucli start -- codex
+npx @salnika/dejavu start -- codex
 ```
 
 ## Install globally
 
 ```bash
-npm install -g dejavucli
+npm install -g @salnika/dejavu
 dejavu doctor
 ```
 

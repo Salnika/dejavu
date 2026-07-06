@@ -30,8 +30,8 @@ brew install dejavu
 ## npm / npx
 
 ```bash
-npx dejavucli start -- codex   # run without installing
-npm install -g dejavucli       # or install globally
+npx @salnika/dejavu start -- codex   # run without installing
+npm install -g @salnika/dejavu       # or install globally
 ```
 
 The npm package is a thin launcher that downloads the matching release binary
@@ -41,7 +41,7 @@ WSL) on x64/arm64.
 ## Cargo
 
 ```bash
-cargo install dejavucli
+cargo install dejavu-cli
 ```
 
 ## Prebuilt Binaries

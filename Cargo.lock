@@ -246,8 +246,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "dejavucli"
-version = "0.2.0"
+name = "dejavu-cli"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "assert_cmd",

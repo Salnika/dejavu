@@ -51,14 +51,14 @@ brew install dejavu
 npm / npx (the command is still `dejavu`):
 
 ```bash
-npx dejavucli start -- codex   # no install
-npm install -g dejavucli       # or install globally
+npx @salnika/dejavu start -- codex   # no install
+npm install -g @salnika/dejavu       # or install globally
 ```
 
 Cargo:
 
 ```bash
-cargo install dejavucli
+cargo install dejavu-cli
 ```
 
 Prebuilt binaries for each release are on the
