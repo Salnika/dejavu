@@ -1,0 +1,257 @@
+# Dejavu
+
+Stop showing coding agents the same command output twice.
+
+Dejavu is a PATH shim for Claude Code, Codex, Cursor agent, opencode, Aider, Gemini CLI, and other terminal-based coding agents. It always runs the real command, but when output is unchanged or nearly unchanged, it returns only a compact delta instead of flooding the agent context again.
+
+- Works without prompting the agent
+- Always preserves exit codes
+- Full output is stored locally and recoverable
+- Supports common commands like npm, pnpm, yarn, git, rg, grep, pytest, cargo, go, tsc, eslint, and docker logs
+- Early benchmark: 52-55% less intercepted output in campaign 2, 87% less output in repeated local rerun loops
+
+## Why This Exists
+
+Coding agents rerun commands constantly: tests, typechecks, `git diff`, search, logs, and build output. Most of those reruns are unchanged or only slightly changed, but the agent still rereads the full output. That wastes context and makes the next step harder to see.
+
+Dejavu is the command-output memory layer for that loop. Your agent keeps running normal shell commands. Dejavu remembers what those command outputs looked like last time and only prints the useful part when they repeat.
+
+## How It Works
+
+`dejavu start <agent>` launches the agent with a shim directory at the front of `PATH`.
+
+```text
+agent runs:      pnpm test
+PATH resolves:   <dejavu-cache>/shims/bin/pnpm
+shim runs:       dejavu run --shim-name pnpm -- test
+Dejavu runs:     the real pnpm found later in PATH
+Dejavu stores:   redacted stdout, stderr, metadata, exit code
+agent receives:  first output, unchanged notice, compact delta, or passthrough
+```
+
+The trust claim is simple: Dejavu never skips command execution. It only changes how repeated command output is displayed.
+
+## Installation
+
+Current source checkout:
+
+```bash
+git clone https://github.com/Salnika/dejavu
+cd dejavu
+cargo install --path .
+dejavu doctor
+```
+
+Local development wrapper:
+
+```bash
+npm run bootstrap:cli
+dejavu doctor
+```
+
+More detail: [docs/INSTALL.md](docs/INSTALL.md).
+
+## Quickstart
+
+```bash
+cd my-project
+dejavu start -- codex
+```
+
+Use the same pattern for other terminal agents:
+
+```bash
+dejavu start -- claude
+dejavu start -- aider
+dejavu start -- opencode
+dejavu start -- gemini
+```
+
+Inside that session, the agent keeps using ordinary commands:
+
+```bash
+pnpm test
+git diff
+rg "TODO"
+cargo test
+docker logs api
+```
+
+Bypass Dejavu for one command:
+
+```bash
+DEJAVU=off pnpm test
+```
+
+Retrieve full output:
+
+```bash
+dejavu show latest --stdout
+```
+
+Full command reference (every command and option): [docs/CLI.md](docs/CLI.md).
+
+## Global Activation (IDE terminals, GUI-launched agents)
+
+`dejavu start` only covers agents you launch from a terminal. For agents that
+run inside an app you launch from the Dock — the VS Code integrated terminal,
+Copilot agent mode, IDE extensions — activate the shims globally:
+
+```bash
+# at the END of ~/.zprofile (after e.g. `brew shellenv`):
+eval "$(dejavu shellenv)"
+```
+
+Any shell that reads your profile then resolves `npm`, `git`, `rg`, … through
+Dejavu, with no `DEJAVU_*` variable needed: the repo context is rebuilt from
+the working directory, and shims self-identify to prevent recursion.
+
+Trade-offs to know:
+
+- Your own terminal commands go through Dejavu too (recorded in the local
+  cache, ~60 ms overhead). `DEJAVU=off` bypasses it anytime.
+- Agents that execute commands without a shell, or through a non-login
+  `bash`/`sh`, never read your profile and are not covered.
+- `dejavu stats --all` gives the cross-repo view of what global activation
+  saves.
+
+To deactivate: remove the line from `~/.zprofile`.
+
+## Example Output
+
+First run still shows bounded command output:
+
+```text
+FAIL tests/session.test.ts
+  expected 403, received 200
+
+Tests: 1 failed, 142 passed
+Full output: dejavu show 8c51f73 --stdout
+```
+
+Unchanged rerun:
+
+```text
+dejavu: output unchanged since run 8c51f73.
+Command: pnpm test
+Exit code: 1
+
+Same failing test:
+- tests/session.test.ts expected 403, received 200
+
+Suppressed ~4,820 estimated tokens.
+Full output: dejavu show b92d1aa --stdout
+Previous output: dejavu show 8c51f73 --stdout
+```
+
+Small delta:
+
+```text
+dejavu: output changed since run b92d1aa.
+Command: pnpm test
+Exit code: 1
+
+Changed lines:
+- expected 403, received 200
++ expected 403, received 500
+
+Suppressed ~4,610 estimated tokens.
+Full output: dejavu show c7a91e2 --stdout
+```
+
+The command ran each time. Only the displayed output changed.
+
+## Safety Model
+
+- Dejavu always executes the real underlying command.
+- Dejavu does not cache execution results to skip work.
+- Dejavu only compresses, deduplicates, or summarizes what is printed back.
+- Dejavu preserves the real exit code.
+- Dejavu stores full command output locally.
+- Dejavu does not send logs to any server.
+- Dejavu can be bypassed with `DEJAVU=off` or `DEJAVU_DISABLED=1`.
+- Mutating or sensitive commands pass through unless Dejavu explicitly supports a safe read-only form.
+
+Useful checks:
+
+```bash
+dejavu doctor
+dejavu doctor --json
+dejavu show latest --stdout
+dejavu uninstall
+```
+
+Full details: [docs/SAFETY.md](docs/SAFETY.md).
+
+## Supported Commands
+
+Dejavu defaults to passthrough. It optimizes only command shapes it recognizes as safe.
+
+| Family | Optimized forms |
+|---|---|
+| JavaScript package managers | `npm`, `pnpm`, `yarn`, `bun` for `test`, `lint`, `typecheck`, `build` scripts |
+| Type and lint | `tsc`, `eslint` without `--fix` or `--fix-dry-run` |
+| Tests | `pytest`, `cargo test`, `go test` |
+| Search | `rg`, `grep` |
+| Files and trees | `find` without side-effecting primaries, `ls`, `tree` |
+| Git read-only | `git status`, `git diff`, `git log`, `git show` |
+| Logs | `docker logs`, `docker compose logs` |
+
+Examples of commands that pass through unchanged:
+
+- `git commit`, `git push`, `git reset`, `git checkout`, `git add`, `git rebase`
+- `docker run`, `docker build`, `docker compose up`, `docker compose down`
+- `npm publish`, package installs, interactive init commands
+- watch modes and interactive commands
+- anything Dejavu cannot confidently classify
+
+## Benchmark Summary
+
+The benchmark is small and should be treated as an early measurement.
+
+| Measurement | Campaign 1 | Campaign 2 |
+|---|---:|---:|
+| Real Codex sessions | 12 | 12 |
+| Reduction on intercepted outputs | 38.8-40.2% | 52.3-54.8% |
+| Repeated local loop, 4 runs | approximately 72% | 87.0% |
+| Success | 12/12 | 12/12 |
+| Average overhead | approximately 62 ms | approximately 60 ms |
+| Full-output requests | 0 | 0 |
+
+Do not read this as a claim about total token spend. In this early benchmark, Dejavu reduced intercepted command output by 52-55% in campaign 2. The strongest effect appears in repeated rerun loops.
+
+Details and reproduction notes: [docs/BENCHMARK.md](docs/BENCHMARK.md).
+
+## Comparison With Adjacent Tools
+
+| Tool | Main idea | Dejavu difference |
+|---|---|---|
+| RTK | Compress command output | Dejavu compares across repeated runs |
+| read-once | Avoid rereading unchanged files | Dejavu targets shell command outputs |
+| pxpipe | Move context into images | Dejavu stays text-based and shell-native |
+| Prompt instructions | Ask the agent to behave | Dejavu intercepts automatically via PATH |
+
+Dejavu is complementary to output compressors. It is not a prompt, not an MCP the agent may ignore, and not a test runner. It is a command-output memory layer.
+
+More detail: [docs/COMPARISON.md](docs/COMPARISON.md).
+
+## Limitations
+
+- Native Windows support is not implemented; use WSL for now.
+- First runs still need to show useful output.
+- Token counts are estimates, currently based on a configurable character heuristic.
+- Raw output is stored locally after best-effort redaction. Treat the cache as sensitive.
+- Some noisy tools need better parsers and normalizers.
+- Long-running watch output and interactive commands are passthrough.
+
+## Contributing
+
+Start with [CONTRIBUTING.md](CONTRIBUTING.md).
+
+High-value contributions:
+
+- weird command output cases
+- parser and normalizer improvements
+- safety reports where Dejavu compacted something it should not have compacted
+- benchmark reports from real agent sessions
+- install smoke tests on macOS, Linux, and WSL

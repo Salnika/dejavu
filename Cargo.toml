@@ -1,0 +1,45 @@
+[package]
+name = "dejavu"
+version = "0.1.0"
+edition = "2021"
+description = "Stop showing coding agents the same command output twice."
+license = "MIT"
+repository = "https://github.com/Salnika/dejavu"
+readme = "README.md"
+keywords = ["agents", "cli", "dedupe", "path", "output"]
+categories = ["command-line-utilities", "development-tools"]
+
+[lib]
+name = "dejavu"
+path = "src/lib.rs"
+
+[[bin]]
+name = "dejavu"
+path = "src/bin/dejavu.rs"
+
+[dependencies]
+anyhow = "1.0.103"
+chrono = "0.4.45"
+clap = { version = "4.6.1", features = ["derive"] }
+dirs = "6.0.0"
+humantime = "2.4.0"
+regex = "1.12.4"
+rusqlite = { version = "0.37", features = ["bundled"] }
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.150"
+sha2 = "0.11.0"
+similar = "3.1.1"
+strip-ansi-escapes = "0.2.1"
+thiserror = "2.0.18"
+toml = "1.1.2"
+uuid = { version = "1.23.4", features = ["v4"] }
+
+[dev-dependencies]
+assert_cmd = "2.2.2"
+insta = "1.48.0"
+predicates = "3.1.4"
+tempfile = "3.27.0"
+
+[profile.release]
+lto = "thin"
+strip = true

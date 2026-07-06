@@ -1,0 +1,459 @@
+//! Command classification and passthrough policy (spec §11).
+//!
+//! Default is passthrough. A command is optimized only when the shim is known,
+//! the family is supported, the args match a whitelist, it is not interactive,
+//! Dejavu is not disabled, and config allows it. Anything ambiguous — in
+//! particular any git subcommand not provably read-only — passes through.
+
+use super::command_key::{build_key, command_original, drop_noise};
+use super::interactive::{has_watch_flag, is_known_interactive};
+use super::{ExecMode, Family, PassthroughReason};
+use crate::config::Config;
+
+use ExecMode::{Optimize, Passthrough};
+use PassthroughReason as R;
+
+pub struct Classified {
+    pub mode: ExecMode,
+    pub command_original: String,
+}
+
+/// Read-only git subcommands that may be optimized.
+const GIT_READONLY: &[&str] = &["status", "diff", "log", "show"];
+/// Git subcommands that must always pass through (spec §10.7).
+const GIT_MUTATING: &[&str] = &[
+    "add",
+    "am",
+    "apply",
+    "branch",
+    "checkout",
+    "cherry-pick",
+    "clean",
+    "clone",
+    "commit",
+    "fetch",
+    "merge",
+    "mv",
+    "pull",
+    "push",
+    "rebase",
+    "reset",
+    "restore",
+    "revert",
+    "rm",
+    "stash",
+    "switch",
+    "tag",
+    "worktree",
+];
+/// JS package-manager scripts we optimize.
+const JS_SCRIPTS: &[&str] = &["test", "lint", "typecheck", "build"];
+/// `find` primaries that cause side effects.
+const FIND_DANGEROUS: &[&str] = &[
+    "-exec", "-execdir", "-delete", "-ok", "-okdir", "-fprint", "-fprintf", "-fls", "-fprint0",
+];
+
+pub fn classify(
+    shim: &str,
+    args: &[String],
+    cfg: &Config,
+    disabled: bool,
+    repo_disabled: bool,
+    _stdin_is_tty: bool,
+) -> Classified {
+    let command_original = command_original(shim, args);
+    let wrap = |mode| Classified {
+        mode,
+        command_original: command_original.clone(),
+    };
+
+    if disabled {
+        return wrap(Passthrough(R::Disabled));
+    }
+    if repo_disabled {
+        return wrap(Passthrough(R::RepoDisabled));
+    }
+    if !cfg.intercept.is_enabled(shim) {
+        return wrap(Passthrough(R::ConfigExcluded));
+    }
+
+    let mode = match shim {
+        "npm" | "pnpm" | "yarn" | "bun" => classify_js(shim, args),
+        "tsc" => classify_tsc(args),
+        "eslint" => classify_eslint(args),
+        "pytest" => classify_pytest(args),
+        "cargo" => classify_cargo(args),
+        "go" => classify_go(args),
+        "rg" | "grep" => classify_search(shim, args),
+        "find" => classify_find(args),
+        "ls" | "tree" => classify_listing(shim, args),
+        "git" => classify_git(args),
+        "docker" => classify_docker(args),
+        _ => Passthrough(R::UnknownShim),
+    };
+    wrap(mode)
+}
+
+/// First token not starting with `-` (the subcommand), with its index.
+fn first_positional(args: &[String]) -> Option<(usize, &str)> {
+    args.iter()
+        .enumerate()
+        .find(|(_, a)| !a.starts_with('-'))
+        .map(|(i, a)| (i, a.as_str()))
+}
+
+fn classify_js(shim: &str, args: &[String]) -> ExecMode {
+    if has_watch_flag(args) {
+        return Passthrough(R::Interactive);
+    }
+    let Some((idx, sub)) = first_positional(args) else {
+        return Passthrough(R::UnsupportedSubcommand);
+    };
+
+    let (script, key_tokens): (&str, Vec<String>) = if sub == "run" {
+        // `pnpm run <script>` — the script is the next positional.
+        match args[idx + 1..].iter().find(|a| !a.starts_with('-')) {
+            Some(s) => (s.as_str(), vec!["run".to_string(), s.clone()]),
+            None => return Passthrough(R::UnsupportedSubcommand),
+        }
+    } else {
+        (sub, vec![sub.to_string()])
+    };
+
+    if is_known_interactive(shim, Some(script)) {
+        return Passthrough(R::Interactive);
+    }
+    if JS_SCRIPTS.contains(&script) {
+        Optimize {
+            family: Family::Validation,
+            command_key: build_key(&format!("validation:{shim}"), &key_tokens),
+        }
+    } else {
+        Passthrough(R::UnsupportedSubcommand)
+    }
+}
+
+fn classify_tsc(args: &[String]) -> ExecMode {
+    if has_watch_flag(args) || args.iter().any(|a| a == "-w" || a == "--watch") {
+        return Passthrough(R::Interactive);
+    }
+    Optimize {
+        family: Family::Validation,
+        command_key: build_key("validation:tsc", &drop_noise(args)),
+    }
+}
+
+fn classify_eslint(args: &[String]) -> ExecMode {
+    if args.iter().any(|a| a == "--fix" || a == "--fix-dry-run") {
+        return Passthrough(R::SideEffecting);
+    }
+    if has_watch_flag(args) {
+        return Passthrough(R::Interactive);
+    }
+    Optimize {
+        family: Family::Validation,
+        command_key: build_key("validation:eslint", &drop_noise(args)),
+    }
+}
+
+fn classify_pytest(args: &[String]) -> ExecMode {
+    Optimize {
+        family: Family::Validation,
+        command_key: build_key("validation:pytest", &drop_noise(args)),
+    }
+}
+
+fn classify_cargo(args: &[String]) -> ExecMode {
+    // Skip a leading `+toolchain` selector.
+    let rest: &[String] = match args.first() {
+        Some(first) if first.starts_with('+') => &args[1..],
+        _ => args,
+    };
+    match first_positional(rest) {
+        Some((idx, "test")) => Optimize {
+            family: Family::Validation,
+            command_key: build_key("validation:cargo:test", &drop_noise(&rest[idx + 1..])),
+        },
+        _ => Passthrough(R::UnsupportedSubcommand),
+    }
+}
+
+fn classify_go(args: &[String]) -> ExecMode {
+    match first_positional(args) {
+        Some((idx, "test")) => Optimize {
+            family: Family::Validation,
+            command_key: build_key("validation:go:test", &drop_noise(&args[idx + 1..])),
+        },
+        _ => Passthrough(R::UnsupportedSubcommand),
+    }
+}
+
+fn classify_search(shim: &str, args: &[String]) -> ExecMode {
+    // Unparseable machine formats degrade to generic later; still safe to capture.
+    Optimize {
+        family: Family::Search,
+        command_key: build_key(&format!("search:{shim}"), &drop_noise(args)),
+    }
+}
+
+fn classify_find(args: &[String]) -> ExecMode {
+    if args.iter().any(|a| FIND_DANGEROUS.contains(&a.as_str())) {
+        return Passthrough(R::SideEffecting);
+    }
+    Optimize {
+        family: Family::Tree,
+        command_key: build_key("tree:find", &drop_noise(args)),
+    }
+}
+
+fn classify_listing(shim: &str, args: &[String]) -> ExecMode {
+    Optimize {
+        family: Family::Tree,
+        command_key: build_key(&format!("tree:{shim}"), &drop_noise(args)),
+    }
+}
+
+/// The git subcommand, skipping global options (`git -C p status`, `git -c k=v
+/// commit`, etc.). Returns `(index, subcommand)`.
+fn git_subcommand(args: &[String]) -> Option<(usize, &str)> {
+    const TAKES_VALUE: &[&str] = &[
+        "-C",
+        "-c",
+        "--git-dir",
+        "--work-tree",
+        "--namespace",
+        "--exec-path",
+        "--super-prefix",
+    ];
+    let mut i = 0;
+    while i < args.len() {
+        let a = &args[i];
+        if a == "--" {
+            i += 1;
+            continue;
+        }
+        if a.starts_with('-') {
+            if TAKES_VALUE.contains(&a.as_str()) {
+                i += 2; // separate-form value follows
+            } else {
+                i += 1; // flag, or `--opt=value` single token
+            }
+            continue;
+        }
+        return Some((i, a.as_str()));
+    }
+    None
+}
+
+fn classify_git(args: &[String]) -> ExecMode {
+    match git_subcommand(args) {
+        Some((idx, sub)) if GIT_READONLY.contains(&sub) => Optimize {
+            family: Family::GitReadonly,
+            command_key: build_key(&format!("git:{sub}"), &drop_noise(&args[idx + 1..])),
+        },
+        Some((_, sub)) if GIT_MUTATING.contains(&sub) => Passthrough(R::MutatingGit),
+        // Unknown or no subcommand → safe passthrough.
+        _ => Passthrough(R::UnsupportedSubcommand),
+    }
+}
+
+/// First positional for docker, skipping global options that take a value.
+fn docker_positional(args: &[String], from: usize) -> Option<(usize, &str)> {
+    const TAKES_VALUE: &[&str] = &[
+        "-H",
+        "--host",
+        "--context",
+        "--config",
+        "--log-level",
+        "-l",
+        "--tlscacert",
+        "--tlscert",
+        "--tlskey",
+    ];
+    let mut i = from;
+    while i < args.len() {
+        let a = &args[i];
+        if a.starts_with('-') {
+            if TAKES_VALUE.contains(&a.as_str()) {
+                i += 2;
+            } else {
+                i += 1;
+            }
+            continue;
+        }
+        return Some((i, a.as_str()));
+    }
+    None
+}
+
+fn classify_docker(args: &[String]) -> ExecMode {
+    match docker_positional(args, 0) {
+        Some((idx, "logs")) => Optimize {
+            family: Family::Logs,
+            command_key: build_key("logs:docker:logs", &drop_noise(&args[idx + 1..])),
+        },
+        Some((idx, "compose")) => match docker_positional(args, idx + 1) {
+            Some((jdx, "logs")) => Optimize {
+                family: Family::Logs,
+                command_key: build_key("logs:docker-compose:logs", &drop_noise(&args[jdx + 1..])),
+            },
+            _ => Passthrough(R::DangerousDocker),
+        },
+        _ => Passthrough(R::DangerousDocker),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn cfg() -> Config {
+        Config::default()
+    }
+
+    fn a(parts: &[&str]) -> Vec<String> {
+        parts.iter().map(|s| s.to_string()).collect()
+    }
+
+    fn mode(shim: &str, args: &[&str]) -> ExecMode {
+        classify(shim, &a(args), &cfg(), false, false, false).mode
+    }
+
+    fn is_opt(m: &ExecMode) -> bool {
+        matches!(m, Optimize { .. })
+    }
+
+    fn key(m: &ExecMode) -> String {
+        match m {
+            Optimize { command_key, .. } => command_key.clone(),
+            _ => String::new(),
+        }
+    }
+
+    #[test]
+    fn js_validation_optimized() {
+        assert!(is_opt(&mode("pnpm", &["test"])));
+        assert!(is_opt(&mode("pnpm", &["run", "test"])));
+        assert!(is_opt(&mode("npm", &["run", "lint"])));
+        assert!(is_opt(&mode("yarn", &["build"])));
+        assert!(is_opt(&mode("bun", &["test"])));
+        assert_eq!(key(&mode("pnpm", &["test"])), "validation:pnpm:test");
+        assert_eq!(
+            key(&mode("pnpm", &["run", "typecheck"])),
+            "validation:pnpm:run:typecheck"
+        );
+    }
+
+    #[test]
+    fn js_side_effect_commands_passthrough() {
+        assert!(!is_opt(&mode("pnpm", &["install"])));
+        assert!(!is_opt(&mode("npm", &["publish"])));
+        assert!(!is_opt(&mode("yarn", &["add", "react"])));
+        assert!(!is_opt(&mode("bun", &["add", "zod"])));
+    }
+
+    #[test]
+    fn watch_mode_passthrough() {
+        assert!(matches!(
+            mode("pnpm", &["test", "--watch"]),
+            Passthrough(R::Interactive)
+        ));
+        assert!(matches!(
+            mode("tsc", &["--watch"]),
+            Passthrough(R::Interactive)
+        ));
+    }
+
+    #[test]
+    fn git_readonly_optimized_mutating_passthrough() {
+        assert!(is_opt(&mode("git", &["diff"])));
+        assert!(is_opt(&mode("git", &["status"])));
+        assert!(is_opt(&mode("git", &["log"])));
+        assert!(is_opt(&mode("git", &["show"])));
+        assert_eq!(key(&mode("git", &["diff"])), "git:diff:default");
+
+        for sub in GIT_MUTATING {
+            assert!(
+                matches!(mode("git", &[sub]), Passthrough(R::MutatingGit)),
+                "git {sub} must pass through"
+            );
+        }
+    }
+
+    #[test]
+    fn git_global_options_before_subcommand() {
+        assert!(is_opt(&mode("git", &["-C", "/tmp/repo", "diff"])));
+        assert!(matches!(
+            mode("git", &["-C", "/tmp/repo", "commit"]),
+            Passthrough(R::MutatingGit)
+        ));
+        assert!(matches!(
+            mode("git", &["-c", "user.name=x", "push"]),
+            Passthrough(R::MutatingGit)
+        ));
+    }
+
+    #[test]
+    fn docker_logs_optimized_run_passthrough() {
+        assert!(is_opt(&mode("docker", &["logs", "api"])));
+        assert!(is_opt(&mode("docker", &["compose", "logs", "api"])));
+        assert!(matches!(
+            mode("docker", &["run", "img"]),
+            Passthrough(R::DangerousDocker)
+        ));
+        assert!(matches!(
+            mode("docker", &["compose", "up"]),
+            Passthrough(R::DangerousDocker)
+        ));
+    }
+
+    #[test]
+    fn find_dangerous_passthrough() {
+        assert!(is_opt(&mode("find", &[".", "-name", "*.ts"])));
+        assert!(matches!(
+            mode("find", &[".", "-delete"]),
+            Passthrough(R::SideEffecting)
+        ));
+        assert!(matches!(
+            mode("find", &[".", "-exec", "rm", "{}", ";"]),
+            Passthrough(R::SideEffecting)
+        ));
+    }
+
+    #[test]
+    fn eslint_fix_passthrough() {
+        assert!(is_opt(&mode("eslint", &["."])));
+        assert!(matches!(
+            mode("eslint", &[".", "--fix"]),
+            Passthrough(R::SideEffecting)
+        ));
+    }
+
+    #[test]
+    fn cargo_go_only_test_optimized() {
+        assert!(is_opt(&mode("cargo", &["test"])));
+        assert!(is_opt(&mode("cargo", &["+nightly", "test"])));
+        assert!(!is_opt(&mode("cargo", &["build"])));
+        assert!(is_opt(&mode("go", &["test", "./..."])));
+        assert!(!is_opt(&mode("go", &["build"])));
+    }
+
+    #[test]
+    fn noise_flags_excluded_from_key() {
+        assert_eq!(
+            key(&mode("rg", &["--color=always", "createSession", "src"])),
+            "search:rg:createSession:src"
+        );
+    }
+
+    #[test]
+    fn disabled_and_config_excluded() {
+        let disabled = classify("pnpm", &a(&["test"]), &cfg(), true, false, false).mode;
+        assert!(matches!(disabled, Passthrough(R::Disabled)));
+
+        let mut c = cfg();
+        c.intercept.git = false;
+        let excluded = classify("git", &a(&["diff"]), &c, false, false, false).mode;
+        assert!(matches!(excluded, Passthrough(R::ConfigExcluded)));
+    }
+}
