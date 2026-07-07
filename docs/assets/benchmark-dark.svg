@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="780" height="340" viewBox="0 0 780 340" role="img" aria-label="Dejavu benchmark: token reduction by scenario">
+  <style>
+    text { font-family: -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif; font-size: 13px; fill: #e6edf3; }
+    .lbl { font-size: 13px; }
+    .b   { font-weight: 600; }
+    .mut { fill: #9198a1; }
+    .sm  { font-size: 11px; }
+    .pct { font-weight: 600; fill: #3fb950; font-variant-numeric: tabular-nums; }
+    .track { fill: #30363d; }
+    .bar { fill: #3fb950; }
+    .rule { stroke: #30363d; stroke-width: 1; }
+    .title { font-size: 15px; font-weight: 600; }
+  </style>
+  <text x="24" y="28" class="title">dejavu bench — token reduction by scenario</text>
+  <text x="24" y="46" class="mut sm">deterministic suite through the real classify + reduce pipeline · reproduce with `dejavu bench`</text>
+  <text x="178" y="75" text-anchor="end" class="lbl">js-validation-loop</text><rect x="190" y="64" width="440" height="14" rx="7" class="track"/><rect x="190" y="64" width="247" height="14" rx="7" class="bar"/><text x="640" y="75" class="pct">56.1%</text><text x="190" y="92" class="mut sm">5,561 → 2,443 tokens</text><text x="178" y="119" text-anchor="end" class="lbl">git-workflow</text><rect x="190" y="108" width="440" height="14" rx="7" class="track"/><rect x="190" y="108" width="399" height="14" rx="7" class="bar"/><text x="640" y="119" class="pct">90.8%</text><text x="190" y="136" class="mut sm">10,329 → 954 tokens</text><text x="178" y="163" text-anchor="end" class="lbl">search-loop</text><rect x="190" y="152" width="440" height="14" rx="7" class="track"/><rect x="190" y="152" width="410" height="14" rx="7" class="bar"/><text x="640" y="163" class="pct">93.1%</text><text x="190" y="180" class="mut sm">9,346 → 644 tokens</text><text x="178" y="207" text-anchor="end" class="lbl">large-output</text><rect x="190" y="196" width="440" height="14" rx="7" class="track"/><rect x="190" y="196" width="440" height="14" rx="7" class="bar"/><text x="640" y="207" class="pct">100.0%</text><text x="190" y="224" class="mut sm">1,057,554 → 241 tokens</text><text x="178" y="251" text-anchor="end" class="lbl">machine-safety</text><text x="190" y="251" class="mut">passthrough by design — machine-readable git is never reduced ✓</text><line x1="24" y1="282" x2="756" y2="282" class="rule"/><text x="178" y="303" text-anchor="end" class="lbl b">overall</text><rect x="190" y="292" width="440" height="14" rx="7" class="track"/><rect x="190" y="292" width="436" height="14" rx="7" class="bar"/><text x="640" y="304" class="pct b">99.0%</text><text x="190" y="320" class="mut sm">1,078,508 tokens saved across the suite</text>
+</svg>

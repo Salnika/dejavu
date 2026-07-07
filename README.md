@@ -257,7 +257,16 @@ Examples of commands that pass through unchanged:
 
 ## Benchmark Summary
 
-The benchmark is small and should be treated as an early measurement.
+The built-in suite (`dejavu bench`) drives the real classify + reduce pipeline
+over deterministic scenarios — anyone can reproduce these numbers locally, and
+CI fails if they regress (`dejavu bench --check`):
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/benchmark-dark.svg">
+  <img alt="Dejavu benchmark: token reduction by scenario — js-validation-loop 56.1%, git-workflow 90.8%, search-loop 93.1%, large-output 100%, machine-safety passthrough by design" src="docs/assets/benchmark-light.svg">
+</picture>
+
+Real agent sessions (small, early measurement):
 
 | Measurement | Campaign 1 | Campaign 2 |
 |---|---:|---:|
@@ -268,9 +277,11 @@ The benchmark is small and should be treated as an early measurement.
 | Average overhead | approximately 62 ms | approximately 60 ms |
 | Full-output requests | 0 | 0 |
 
-Do not read this as a claim about total token spend. In this early benchmark, Dejavu reduced intercepted command output by 52-55% in campaign 2. The strongest effect appears in repeated rerun loops.
+Do not read this as a claim about total token spend. In these measurements, Dejavu reduced intercepted command output by 52-55% in real sessions. The strongest effect appears in repeated rerun loops.
 
-Details and reproduction notes: [docs/BENCHMARK.md](docs/BENCHMARK.md).
+Details and reproduction notes: [docs/BENCHMARK.md](docs/BENCHMARK.md). The
+chart above is generated from real bench output by
+[`scripts/render-benchmark-chart.py`](scripts/render-benchmark-chart.py).
 
 ## Comparison With Adjacent Tools
 
