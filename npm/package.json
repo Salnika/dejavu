@@ -1,6 +1,6 @@
 {
   "name": "@salnika/dejavu",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Stop showing coding agents the same command output twice.",
   "bin": {
     "dejavu": "bin/dejavu.js"
