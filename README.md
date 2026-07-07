@@ -266,6 +266,16 @@ CI fails if they regress (`dejavu bench --check`):
   <img alt="Grouped bar chart: tokens the agent reads with vs without Dejavu — js-validation-loop 5,561 vs 2,443 (−56%), git-workflow 10,329 vs 954 (−91%), search-loop 9,346 vs 644 (−93%), large-output 1,057,554 vs 241 (−99.9%), machine-safety identical bars (passthrough by design)" src="docs/assets/benchmark-light.svg">
 </picture>
 
+What each scenario simulates:
+
+| Scenario | Simulates | Why it matters |
+|---|---|---|
+| `js-validation-loop` | 5× `pnpm test` walking every state: fail → identical re-run → different failure → rewrite → pass | Covers first-seen, unchanged, small/large delta, and fail→pass |
+| `git-workflow` | `git diff` over 40 files: first, identical, modified | Hunk summaries + dedup for diffs |
+| `search-loop` | `rg` with 180 matches: first, identical, +5 matches | Count/sample first, then only the added matches |
+| `large-output` | A 40,000-line build log, twice | Volume guards: tail summary, 14K inline cap, dedup |
+| `machine-safety` | `--porcelain`, `--name-only`, `@{upstream}` | Equal bars **by design** — parsed output is never reduced; `--check` fails otherwise |
+
 Real agent sessions (small, early measurement):
 
 | Measurement | Campaign 1 | Campaign 2 |

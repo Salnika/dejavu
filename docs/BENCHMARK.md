@@ -64,21 +64,78 @@ Campaign 2 non-cached input reduction by effort:
 | medium | 33,124 | 22,940 | -31% |
 | xhigh | 45,027 | 22,808 | -49% |
 
-## Built-in Local Benchmark
+## Built-in Benchmark Suite
 
-The repository includes a deterministic synthetic benchmark. It does not replace the real-session benchmark, but it is useful for checking that the reduction pipeline still works.
+The repository includes a deterministic synthetic suite. It does not replace
+the real-session benchmark, but every step runs through the REAL `classify()`
+and `reduce()` pipeline (nothing is mocked), so it measures — and guards —
+what the pipeline actually does.
 
 ```bash
-cargo run -- bench
-cargo run -- bench --json
+cargo run -- bench            # full suite + latency micro-bench
+cargo run -- bench --json     # machine-readable report
+cargo run -- bench --check    # regression gate: exit 2 on any violation (runs in CI)
+cargo run -- bench --scenario git-workflow
 ```
 
-Expected properties:
+The README chart is generated from this suite by
+`scripts/render-benchmark-chart.py`. In the chart, the gray bar is the raw
+output an agent would read without Dejavu; the green bar is what it reads
+with Dejavu. Bars are scaled per scenario (each pair relative to its own
+gray bar) so the 1M-token scenario doesn't flatten the others; the labeled
+token counts are the real absolute values.
 
-- covers first-seen, unchanged, small-delta, and large-delta states
-- has deterministic token totals
-- requires no LLM
-- uses an isolated temporary cache
+### What each scenario simulates
+
+**`js-validation-loop`** — the classic agent debugging loop: five runs of
+`pnpm test` over a 120-case suite that walk through every reduction state.
+Run 1 fails one test (bounded first output: the failure, not the 119 PASS
+lines); run 2 is identical (`unchanged` — the core dedup); run 3 fails a
+*different* test (`small_delta`: just the diff); run 4 is a completely
+different output (`large_delta`: bounded summary); run 5 passes
+(**fail → pass**: "command now passes." plus what used to fail). Reduction is
+"only" ~56% because the first run must still show the useful content — by
+design. `--check` requires all four states plus the fail→pass transition.
+
+**`git-workflow`** — `git diff` over 40 files, three times: first run is
+summarized by the git-diff parser (files + per-file `+/-` counts instead of
+the full patch), an identical re-run dedups to `unchanged`, a modified diff
+produces a delta.
+
+**`search-loop`** — `rg createSession src` with 180 matches, three times:
+first run gives count + files + a sample; identical re-run dedups; a re-run
+with 5 new matches shows only the added matches.
+
+**`large-output`** — a 40,000-line build log (`pnpm run build`), twice. This
+exercises the volume guards: passing-run output reduced to its tail summary,
+the 14K-char hard cap (so IDE agents like Copilot always capture the envelope
+inline), and dedup on the second run. It dominates the suite total — read the
+"overall" number with that in mind.
+
+**`machine-safety`** — `git status --porcelain`, `git diff --name-only`, and
+`git log --oneline ..@{upstream}`: machine-readable forms that shell prompts,
+IDE source control, git hooks, and `$(git …)` substitutions PARSE. The
+expected result is **zero reduction**: byte-identical passthrough. Equal bars
+in the chart are the safety guarantee made visible, and `--check` fails if a
+single one of these steps is ever reduced.
+
+### Expectations and the CI gate
+
+Each scenario declares expectations: required state coverage, a minimum
+reduction floor, the 15K inline cap on every emitted output, and (for
+machine-safety) strict passthrough. `dejavu bench --check` exits non-zero on
+any violation and runs in CI, so a change that regresses reduction or —
+worse — starts reducing parsed output fails the build.
+
+### Latency micro-bench
+
+The full run also spawns the actual binary end-to-end (shim pipeline,
+capture, reduce, record) against a trivial fake tool, ~15 iterations after a
+warmup, and reports p50/p95 per-command overhead. It is machine-dependent, so
+it is reported but never gated.
+
+Other properties: deterministic token totals, no LLM, no network, isolated
+temporary cache per scenario.
 
 ## Stats And Reports
 
