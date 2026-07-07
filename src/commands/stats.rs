@@ -134,11 +134,11 @@ fn run_all(json: bool, public: bool) -> anyhow::Result<i32> {
         by_command.into_iter().collect()
     };
     if !public {
-        top.sort_by(|a, b| b.1.cmp(&a.1));
+        top.sort_by_key(|b| std::cmp::Reverse(b.1));
         top.truncate(5);
     }
 
-    repos.sort_by(|a, b| b.saved.cmp(&a.saved));
+    repos.sort_by_key(|b| std::cmp::Reverse(b.saved));
     let repo_count = repos.len();
     if public {
         repos.clear();
