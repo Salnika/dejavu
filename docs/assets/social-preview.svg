@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640" role="img" aria-label="Dejavu — stop showing coding agents the same command output twice">
+  <defs>
+    <radialGradient id="glow" cx="18%" cy="16%" r="60%">
+      <stop offset="0%" stop-color="#2da44e" stop-opacity="0.22"/>
+      <stop offset="100%" stop-color="#2da44e" stop-opacity="0"/>
+    </radialGradient>
+    <style>
+      .sans { font-family: 'Liberation Sans','DejaVu Sans',Arial,sans-serif; }
+      .mono { font-family: 'DejaVu Sans Mono','Liberation Mono',monospace; }
+    </style>
+  </defs>
+
+  <!-- background -->
+  <rect width="1280" height="640" fill="#0d1117"/>
+  <rect width="1280" height="640" fill="url(#glow)"/>
+  <rect x="0" y="0" width="1280" height="640" fill="none"/>
+
+  <!-- eyebrow -->
+  <text x="82" y="140" class="sans" font-size="17" font-weight="700" letter-spacing="2.5" fill="#3fb950">COMMAND-OUTPUT MEMORY FOR CODING AGENTS</text>
+
+  <!-- wordmark: ghost (déjà-vu double vision) + main -->
+  <text x="86" y="258" class="sans" font-size="112" font-weight="700" fill="#2da44e" opacity="0.20">Dejavu</text>
+  <text x="80" y="252" class="sans" font-size="112" font-weight="700" fill="#e6edf3">Dejavu</text>
+
+  <!-- tagline -->
+  <text x="82" y="330" class="sans" font-size="34" font-weight="400" fill="#adbac7">Stop showing coding agents the</text>
+  <text x="82" y="374" class="sans" font-size="34" font-weight="400" fill="#adbac7">same command output twice.</text>
+
+  <!-- divider -->
+  <line x1="83" y1="416" x2="612" y2="416" stroke="#30363d" stroke-width="1.5"/>
+
+  <!-- stat line -->
+  <text x="82" y="464" class="sans" font-size="24">
+    <tspan fill="#3fb950" font-weight="700">52-55%</tspan><tspan fill="#8b949e"> less intercepted output   </tspan><tspan fill="#3fb950" font-weight="700">~87%</tspan><tspan fill="#8b949e"> in rerun loops</tspan>
+  </text>
+
+  <!-- footer meta -->
+  <text x="83" y="566" class="sans" font-size="18" fill="#6e7681">PATH shim · Rust · MIT · Claude Code · Codex · Cursor · Aider</text>
+
+  <!-- terminal card -->
+  <rect x="742" y="150" width="456" height="344" rx="16" fill="#161b22" stroke="#30363d" stroke-width="1.5"/>
+  <circle cx="778" cy="188" r="7" fill="#ff5f56"/>
+  <circle cx="802" cy="188" r="7" fill="#ffbd2e"/>
+  <circle cx="826" cy="188" r="7" fill="#27c93f"/>
+  <text x="1176" y="193" class="mono" font-size="15" fill="#6e7681" text-anchor="end">zsh</text>
+  <line x1="742" y1="214" x2="1198" y2="214" stroke="#30363d" stroke-width="1"/>
+
+  <text x="772" y="258" class="mono" font-size="19"><tspan fill="#8b949e">$ </tspan><tspan fill="#e6edf3">pnpm test</tspan></text>
+  <text x="772" y="306" class="mono" font-size="19" fill="#8b949e">dejavu: output unchanged</text>
+  <text x="772" y="334" class="mono" font-size="19" fill="#8b949e">since run 8c51f73</text>
+  <text x="772" y="378" class="mono" font-size="19" fill="#adbac7">Command: pnpm test  Exit 1</text>
+  <text x="772" y="422" class="mono" font-size="19" font-weight="700" fill="#3fb950">Suppressed ~4,820 tokens</text>
+  <text x="772" y="466" class="mono" font-size="17" font-style="italic" fill="#6e7681">&gt; the real command still ran</text>
+</svg>
