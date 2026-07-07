@@ -132,6 +132,57 @@ fn global_mode_without_agent_context_never_reduces() {
     assert!(!text.contains("unchanged"), "output was reduced: {text}");
     // Both raw runs present: 2 × 200 lines.
     assert_eq!(text.matches("validation line 200").count(), 2);
+
+    // Fast path: nothing is recorded either — the user's own terminal history
+    // stays out of the cache (no per-repo runs.sqlite was even created).
+    for root in [
+        home.path().join(".cache/dejavu"),
+        home.path().join("Library/Caches/dejavu"),
+    ] {
+        let Ok(entries) = std::fs::read_dir(&root) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let db = entry.path().join("runs.sqlite");
+            assert!(
+                !db.exists(),
+                "no-agent passthrough must not record runs: {}",
+                db.display()
+            );
+        }
+    }
+
+    // Exit codes are preserved on the fast path too: intercept a failing
+    // command (regenerate shims after adding it to the config) and check the
+    // code survives the shim -> dejavu -> real chain untouched.
+    write_exec(fake.path(), "failing", "#!/bin/sh\necho boom\nexit 42\n");
+    let mut cfg_home = home.path().join(".config/dejavu");
+    std::fs::create_dir_all(&cfg_home).unwrap();
+    cfg_home.push("config.toml");
+    std::fs::write(&cfg_home, "[intercept]\nextra = [\"failing\"]\n").unwrap();
+    dejavu_cmd()
+        .env("HOME", home.path())
+        .env("XDG_CACHE_HOME", home.path().join(".cache"))
+        .env("XDG_CONFIG_HOME", home.path().join(".config"))
+        .arg("shellenv")
+        .assert()
+        .success();
+    let out = StdCommand::new("/bin/sh")
+        .arg("-c")
+        .arg(format!("{line}\ncd {} && failing", proj.path().display()))
+        .env_clear()
+        .env("HOME", home.path())
+        .env("XDG_CACHE_HOME", home.path().join(".cache"))
+        .env("XDG_CONFIG_HOME", home.path().join(".config"))
+        .env("PATH", &base_path)
+        .output()
+        .unwrap();
+    assert_eq!(
+        out.status.code(),
+        Some(42),
+        "fast path must preserve exit codes"
+    );
+    assert!(String::from_utf8_lossy(&out.stdout).contains("boom"));
 }
 
 #[test]

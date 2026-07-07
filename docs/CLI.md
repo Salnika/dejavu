@@ -267,7 +267,9 @@ Under **global activation** (no session), reduction additionally requires an
 agent context: an agent marker in the environment (`AI_AGENT`,
 `COPILOT_AGENT`, `CLAUDECODE`, `CODEX_SANDBOX`, `CURSOR_AGENT`) **and** stdout
 being a terminal — or `DEJAVU_FORCE=1`. Anything else (your own terminals,
-pipelines, `$(…)` substitutions, IDE SCM) always receives raw output.
+pipelines, `$(…)` substitutions, IDE SCM) takes a fast path: the real binary
+is resolved and exec'd directly — raw output, native speed, and nothing is
+recorded in the cache.
 
 ---
 

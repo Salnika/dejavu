@@ -145,8 +145,10 @@ terminals only, so:
 
 Other notes:
 
-- Commands are still recorded in the local cache either way (small overhead);
-  `DEJAVU=off` bypasses Dejavu entirely for one command.
+- Outside an agent context, shims take a fast path: resolve the real binary
+  and exec it — no repo detection, no database, nothing recorded. Your own
+  terminal stays at native speed and its history stays out of the cache.
+  `DEJAVU=off` still bypasses Dejavu entirely for one command.
 - Agents that execute commands without a shell never read your profile and
   are not covered — check with `dejavu doctor` from their terminal.
 - `dejavu stats --all` gives the cross-repo view of what global activation

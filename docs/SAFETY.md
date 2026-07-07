@@ -6,7 +6,9 @@ Dejavu is designed around one invariant:
 The real command always runs.
 ```
 
-Dejavu is not an execution cache. It never decides that a command can be skipped because a previous run exists. It executes the real underlying binary, captures the result, stores the full output locally, and only then decides what compact output to print back to the agent.
+Dejavu is not an execution cache. It never decides that a command can be skipped because a previous run exists. When a command runs in an agent context, Dejavu executes the real underlying binary, captures the result, stores the full output locally, and only then decides what compact output to print back to the agent.
+
+Outside an agent context (your own terminal, pipelines, IDE internals under global activation), shims take a fast path: they resolve the real binary and exec it directly — nothing is captured, stored, or recorded.
 
 ## Guarantees
 

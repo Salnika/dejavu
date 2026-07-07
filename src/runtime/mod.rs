@@ -113,6 +113,19 @@ pub fn run_shim(shim_name: &str, args: &[String]) -> anyhow::Result<i32> {
         return passthrough_exec(&real, args, &cwd, &sanitized_path);
     }
 
+    // Fast path: outside any agent context (no session, no agent marker + pty,
+    // no DEJAVU_FORCE), nothing will ever be reduced — the consumer is a human
+    // terminal or an output-parsing program. Resolve and exec, full stop: no
+    // repo detection, no config load, no database, no recording. This keeps
+    // shell prompts and IDE internals at native speed under global activation,
+    // and keeps the user's own terminal history out of the local cache.
+    {
+        use std::io::IsTerminal;
+        if !env::reduction_allowed(std::io::stdout().is_terminal()) {
+            return passthrough_exec(&real, args, &cwd, &sanitized_path);
+        }
+    }
+
     // Build context; any failure → safe passthrough (never break the command).
     let ctx = match RunCtx::resolve(&cwd, agent.as_ref()) {
         Ok(c) => c,
@@ -121,7 +134,7 @@ pub fn run_shim(shim_name: &str, args: &[String]) -> anyhow::Result<i32> {
 
     let repo_disabled = state::is_repo_disabled(&ctx.layout);
     let stdin_tty = crate::exec::interactive::stdin_is_tty();
-    let mut classified = classify(
+    let classified = classify(
         shim_name,
         args,
         &ctx.config,
@@ -129,16 +142,6 @@ pub fn run_shim(shim_name: &str, args: &[String]) -> anyhow::Result<i32> {
         repo_disabled,
         stdin_tty,
     );
-
-    // Global-activation gate: reduce only for an agent (session, DEJAVU_FORCE,
-    // or agent marker + pty). A user terminal or an output-parsing program
-    // must always receive the raw output.
-    if matches!(classified.mode, ExecMode::Optimize { .. }) {
-        use std::io::IsTerminal;
-        if !env::reduction_allowed(std::io::stdout().is_terminal()) {
-            classified.mode = ExecMode::Passthrough(PassthroughReason::NoAgentContext);
-        }
-    }
 
     match &classified.mode {
         ExecMode::Passthrough(reason) => {
