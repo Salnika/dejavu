@@ -96,19 +96,36 @@ fn target_profiles(shell: Option<&str>) -> Vec<(&'static str, PathBuf)> {
         Some("sh") => &["sh"],
         _ => &["zsh", "bash", "sh"], // default / "all"
     };
-    want.iter()
-        .filter_map(|s| profile_path(s).map(|p| (*s, p)))
-        .collect()
-}
-
-fn profile_path(shell: &str) -> Option<PathBuf> {
-    let home = dirs::home_dir()?;
-    Some(match shell {
-        "zsh" => zsh_zdotdir().join(".zshrc"),
-        "bash" => home.join(".bashrc"),
-        "sh" => home.join(".profile"),
-        _ => return None,
-    })
+    let Some(home) = dirs::home_dir() else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    for s in want {
+        match *s {
+            "zsh" => {
+                let zdot = zsh_zdotdir();
+                // .zshrc: interactive shells (IDE terminals). .zprofile: LOGIN
+                // shells including non-interactive `zsh -lc`, which GUI apps
+                // (Codex, launchers) use to run commands — .zshrc is NOT read
+                // there, so both files are needed for full coverage.
+                out.push(("zsh", zdot.join(".zshrc")));
+                out.push(("zsh", zdot.join(".zprofile")));
+            }
+            "bash" => {
+                out.push(("bash", home.join(".bashrc")));
+                // A login bash reads .bash_profile and then IGNORES .profile.
+                // Only add the block there if the file already exists —
+                // creating it would shadow the user's .profile.
+                let bp = home.join(".bash_profile");
+                if bp.exists() {
+                    out.push(("bash", bp));
+                }
+            }
+            "sh" => out.push(("sh", home.join(".profile"))),
+            _ => {}
+        }
+    }
+    out
 }
 
 /// Where zsh reads `.zshrc`. Inside a `dejavu start` session `ZDOTDIR` points
