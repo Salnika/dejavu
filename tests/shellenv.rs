@@ -43,9 +43,18 @@ fn shellenv_generates_global_shims_and_activates_interception() {
         .unwrap();
     assert!(shim_dir.join("pnpm").is_file());
     assert!(shim_dir.join("git").is_file());
+    // Self-shim: the envelope's `dejavu show …` follow-up must work everywhere.
+    assert!(shim_dir.join("dejavu").is_file());
+    let v = StdCommand::new(shim_dir.join("dejavu"))
+        .arg("--version")
+        .output()
+        .unwrap();
+    assert!(String::from_utf8_lossy(&v.stdout).starts_with("dejavu "));
 
-    // 2. Eval the line in a shell with NO DEJAVU_* variable: interception must
-    // work purely from PATH (repo context rebuilt from cwd, no recursion).
+    // 2. Eval the line in a shell with NO DEJAVU_* session env: interception
+    // works purely from PATH (repo context rebuilt from cwd, no recursion).
+    // Output capture here is a PIPE, so global-mode reduction requires an
+    // explicit DEJAVU_FORCE=1 (agents in pty terminals need no override).
     let dejavu_bin_dir = assert_cmd::cargo::cargo_bin("dejavu");
     let base_path = format!(
         "{}:{}:/usr/bin:/bin",
@@ -63,14 +72,66 @@ fn shellenv_generates_global_shims_and_activates_interception() {
         .env("HOME", home.path())
         .env("XDG_CACHE_HOME", home.path().join(".cache"))
         .env("PATH", &base_path)
+        .env("DEJAVU_FORCE", "1")
         .output()
         .unwrap();
     assert!(out.status.success());
     let text = String::from_utf8_lossy(&out.stdout);
-    // Interception works with no DEJAVU_* env: the second identical run is
-    // deduplicated into an "unchanged" envelope for `pnpm test`.
+    // The second identical run is deduplicated into an "unchanged" envelope.
     assert!(text.contains("pnpm test"), "output: {text}");
     assert!(text.contains("unchanged"), "output: {text}");
+}
+
+#[test]
+fn global_mode_without_agent_context_never_reduces() {
+    let home = tempfile::tempdir().unwrap();
+    let fake = tempfile::tempdir().unwrap();
+    let proj = tempfile::tempdir().unwrap();
+    write_exec(
+        fake.path(),
+        "pnpm",
+        "#!/bin/sh\ni=1\nwhile [ \"$i\" -le 200 ]; do echo \"validation line $i stable output padding content\"; i=$((i+1)); done\nexit 0\n",
+    );
+
+    let line = String::from_utf8_lossy(
+        &dejavu_cmd()
+            .env("HOME", home.path())
+            .env("XDG_CACHE_HOME", home.path().join(".cache"))
+            .arg("shellenv")
+            .output()
+            .unwrap()
+            .stdout,
+    )
+    .trim()
+    .to_string();
+
+    let dejavu_bin_dir = assert_cmd::cargo::cargo_bin("dejavu");
+    let base_path = format!(
+        "{}:{}:/usr/bin:/bin",
+        fake.path().display(),
+        dejavu_bin_dir.parent().unwrap().display(),
+    );
+    // No DEJAVU_* session, no agent marker, stdout is a pipe: a user terminal
+    // or an output-parsing program. Both runs must be RAW — never an envelope.
+    let script = format!(
+        "{line}\ncd {} && pnpm test && pnpm test",
+        proj.path().display()
+    );
+    let out = StdCommand::new("/bin/sh")
+        .arg("-c")
+        .arg(&script)
+        .env_clear()
+        .env("HOME", home.path())
+        .env("XDG_CACHE_HOME", home.path().join(".cache"))
+        .env("PATH", &base_path)
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    let text = String::from_utf8_lossy(&out.stdout);
+    assert!(!text.contains("dejavu:"), "output was reduced: {text}");
+    assert!(!text.contains("unchanged"), "output was reduced: {text}");
+    // Both raw runs present: 2 × 200 lines.
+    assert_eq!(text.matches("validation line 200").count(), 2);
 }
 
 #[test]

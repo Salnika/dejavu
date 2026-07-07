@@ -112,21 +112,39 @@ pub fn run(json: bool) -> anyhow::Result<i32> {
     });
 
     let path = std::env::var_os("PATH").unwrap_or_default();
-    let path_has_shim = split_path(&path).iter().any(|p| p == &shim_dir);
+    let global_dir = crate::commands::shellenv::global_shim_dir().ok();
+    let path_has_session = split_path(&path).iter().any(|p| p == &shim_dir);
+    let path_has_global = global_dir
+        .as_ref()
+        .is_some_and(|g| split_path(&path).iter().any(|p| p == g));
+    let path_has_shim = path_has_session || path_has_global;
+    // The shim dir whose entries should win PATH resolution here.
+    let active_dir: &Path = if path_has_session {
+        &shim_dir
+    } else if path_has_global {
+        global_dir.as_ref().unwrap()
+    } else {
+        &shim_dir
+    };
     checks.push(chk(
         "shim directory in PATH",
         if path_has_shim { "ok" } else { "warn" },
-        if path_has_shim {
-            format!("{} is on PATH", shim_dir.display())
+        if path_has_session {
+            format!("session shims on PATH ({})", shim_dir.display())
+        } else if path_has_global {
+            format!(
+                "global activation on PATH ({})",
+                global_dir.as_ref().unwrap().display()
+            )
         } else {
-            format!("{} is not on PATH", shim_dir.display())
+            "no shim dir on PATH — use `dejavu start …` or `dejavu shellenv --install`".to_string()
         },
     ));
 
     let mut not_via_shim = Vec::new();
     if path_has_shim {
         for name in &enabled {
-            let expected = shim_dir.join(name);
+            let expected = active_dir.join(name);
             if !first_on_path(name, &path).is_some_and(|p| same_path(&p, &expected)) {
                 not_via_shim.push(*name);
             }
@@ -152,6 +170,55 @@ pub fn run(json: bool) -> anyhow::Result<i32> {
             "run inside `dejavu start -- dejavu doctor` to verify active shims".to_string()
         },
     ));
+
+    // Build type: a debug binary adds ~25ms to every shimmed command.
+    if cfg!(debug_assertions) {
+        checks.push(chk(
+            "build",
+            "warn",
+            "debug build (+~25ms per command) — install a release build and re-run \
+             `dejavu shellenv --install`",
+        ));
+    } else {
+        checks.push(chk("build", "ok", "release build"));
+    }
+    // Shims baked against a debug binary keep the cost even after a rebuild.
+    let mut debug_shims = Vec::new();
+    for dir in [Some(&shim_dir), global_dir.as_ref()].into_iter().flatten() {
+        for name in enabled.iter().chain(std::iter::once(&"dejavu")) {
+            if let Ok(body) = std::fs::read_to_string(dir.join(name)) {
+                if body.contains("/target/debug/") {
+                    debug_shims.push(format!("{}", dir.join(name).display()));
+                }
+            }
+        }
+    }
+    if !debug_shims.is_empty() {
+        checks.push(chk(
+            "shim binary",
+            "warn",
+            format!(
+                "{} shim(s) point at a target/debug binary — re-run `dejavu shellenv --install` \
+                 (or `dejavu start`) from a release build",
+                debug_shims.len()
+            ),
+        ));
+    }
+
+    // VS Code / Copilot probe: agent-mode terminals source the shell profiles,
+    // so global activation is what makes Copilot's commands hit the shims.
+    if std::env::var_os("TERM_PROGRAM").is_some_and(|v| v == "vscode") {
+        checks.push(chk(
+            "vscode",
+            if path_has_shim { "ok" } else { "warn" },
+            if path_has_shim {
+                "Copilot ready: shims active in this VS Code terminal"
+            } else {
+                "shims not on PATH in this VS Code terminal — run `dejavu shellenv --install`, \
+                 then fully restart VS Code"
+            },
+        ));
+    }
 
     // Real binary resolved per shim.
     let dejavu_dir = std::env::current_exe()

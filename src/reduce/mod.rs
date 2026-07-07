@@ -209,6 +209,14 @@ fn build_emit(
         }
     };
 
+    // Hard ceiling on any reduced body: IDE agents capture terminal output
+    // inline only up to a limit (VS Code Copilot: 20K chars; beyond that the
+    // output spills to a file and the model sees a preview). Keeping the whole
+    // envelope under ~15K chars / 500 lines guarantees inline delivery.
+    const BODY_MAX_CHARS: usize = 14_000;
+    const BODY_MAX_LINES: usize = 500;
+    body = clamp_body(body, BODY_MAX_CHARS, BODY_MAX_LINES);
+
     // An `unchanged` run replays the stored summary: cap it — the agent has
     // already seen the full version, a reminder needs only the head.
     const UNCHANGED_REPLAY_MAX_LINES: usize = 10;
@@ -281,6 +289,22 @@ fn build_emit(
         saved_tokens,
         summary,
     }
+}
+
+/// Truncate a reduced body to hard line/char ceilings, on char boundaries,
+/// with an explicit marker (the full output stays one `dejavu show` away).
+fn clamp_body(body: String, max_chars: usize, max_lines: usize) -> String {
+    let over_lines = body.lines().count() > max_lines;
+    let over_chars = body.chars().count() > max_chars;
+    if !over_lines && !over_chars {
+        return body;
+    }
+    let mut kept: String = body.lines().take(max_lines).collect::<Vec<_>>().join("\n");
+    if kept.chars().count() > max_chars {
+        kept = kept.chars().take(max_chars).collect();
+    }
+    kept.push_str("\n... (output clamped)");
+    kept
 }
 
 fn generic_status(classification: Classification, exit_code: i32, prev: Option<&str>) -> String {

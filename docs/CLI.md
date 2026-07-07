@@ -246,6 +246,7 @@ output and the real exit code. Not meant to be invoked by hand.
 |---|---|---|
 | `DEJAVU=off` (or `0`, `false`, `disabled`) | you → dejavu | Bypass Dejavu for a command: `DEJAVU=off pnpm test` |
 | `DEJAVU_DISABLED=1` | you → dejavu | Same as above (legacy form) |
+| `DEJAVU_FORCE=1` | you → dejavu | Force reduction under global activation even without an agent marker / TTY |
 | `DEJAVU_ACTIVE=1` | dejavu → session | Set inside a `dejavu start` session |
 | `DEJAVU_BIN` | dejavu → session | Absolute path to the `dejavu` binary used by shims |
 | `DEJAVU_REPO_ROOT` | dejavu → session | Detected repo root |
@@ -256,6 +257,12 @@ output and the real exit code. Not meant to be invoked by hand.
 
 None of the session variables are required: shims work from `PATH` alone
 (see `shellenv`).
+
+Under **global activation** (no session), reduction additionally requires an
+agent context: an agent marker in the environment (`AI_AGENT`,
+`COPILOT_AGENT`, `CLAUDECODE`, `CODEX_SANDBOX`, `CURSOR_AGENT`) **and** stdout
+being a terminal — or `DEJAVU_FORCE=1`. Anything else (your own terminals,
+pipelines, `$(…)` substitutions, IDE SCM) always receives raw output.
 
 ---
 

@@ -10,8 +10,22 @@ pub const SESSION_ID: &str = "DEJAVU_SESSION_ID";
 pub const SHIM_DIR: &str = "DEJAVU_SHIM_DIR";
 pub const MODE: &str = "DEJAVU";
 pub const DISABLED: &str = "DEJAVU_DISABLED";
+/// Force reduction even outside a session / agent context (`DEJAVU_FORCE=1`).
+pub const FORCE: &str = "DEJAVU_FORCE";
 /// The user's original ZDOTDIR (or $HOME), sourced by the wrapper zdot files.
 pub const ORIG_ZDOTDIR: &str = "DEJAVU_ORIG_ZDOTDIR";
+
+/// Environment markers that IDE-embedded agents set in the shells they drive.
+/// `AI_AGENT` is the cross-vendor convention (VS Code sets
+/// `AI_AGENT=github_copilot_vscode_agent` + `COPILOT_AGENT=1` in agent-tool
+/// terminals only, never in user terminals).
+pub const AGENT_MARKERS: &[&str] = &[
+    "AI_AGENT",
+    "COPILOT_AGENT",
+    "CLAUDECODE",
+    "CODEX_SANDBOX",
+    "CURSOR_AGENT",
+];
 
 /// True when the user asks Dejavu to force passthrough everywhere.
 pub fn is_disabled() -> bool {
@@ -28,6 +42,32 @@ pub fn is_disabled() -> bool {
 /// True when running inside a `dejavu start` session.
 pub fn is_active() -> bool {
     std::env::var_os(ACTIVE).is_some_and(|v| v == "1")
+}
+
+/// True when `DEJAVU_FORCE=1` overrides the global-mode reduction gates.
+pub fn is_forced() -> bool {
+    std::env::var_os(FORCE).is_some_and(|v| v == "1")
+}
+
+/// True when an agent marker is present in the environment (an IDE-embedded
+/// agent is driving this shell).
+pub fn agent_marker_present() -> bool {
+    AGENT_MARKERS
+        .iter()
+        .any(|m| std::env::var_os(m).is_some_and(|v| !v.is_empty()))
+}
+
+/// Whether output reduction is allowed for this invocation.
+///
+/// - Inside a `dejavu start` session: always (the agent captures via pipes).
+/// - `DEJAVU_FORCE=1`: always (explicit human election).
+/// - Global activation (shims on PATH, no session): only when an agent marker
+///   is present AND stdout is a terminal. IDE agents like Copilot run commands
+///   in a real pty, while programs that PARSE output (`$(git …)`, pipelines,
+///   the IDE SCM) read through pipes — so this pair of gates means a reduced
+///   envelope can only ever land in front of an agent, never a parser.
+pub fn reduction_allowed(stdout_is_tty: bool) -> bool {
+    is_active() || is_forced() || (agent_marker_present() && stdout_is_tty)
 }
 
 /// The ambient session, reconstructed from `DEJAVU_*` env vars. `None` when a

@@ -132,16 +132,27 @@ Any shell that reads your profile then resolves `npm`, `git`, `rg`, … through
 Dejavu, with no `DEJAVU_*` variable needed: the repo context is rebuilt from
 the working directory, and shims self-identify to prevent recursion.
 
-Trade-offs to know:
+Global activation is **agent-gated**: output is reduced only when an agent is
+actually reading it — inside a `dejavu start` session, or when the shell
+carries an agent marker (`AI_AGENT`, `COPILOT_AGENT`, `CLAUDECODE`, …) *and*
+output goes to a terminal. VS Code sets those markers in Copilot's agent
+terminals only, so:
 
-- Your own terminal commands go through Dejavu too (recorded in the local
-  cache, ~60 ms overhead). `DEJAVU=off` bypasses it anytime.
-- Agents that execute commands without a shell, or through a non-login
-  `bash`/`sh`, never read your profile and are not covered.
+- Copilot agent mode gets reduced output;
+- your own terminals, scripts, pipelines, `$(git …)`, VS Code tasks and the
+  SCM view always get the raw output;
+- `DEJAVU_FORCE=1` overrides the gate for custom setups.
+
+Other notes:
+
+- Commands are still recorded in the local cache either way (small overhead);
+  `DEJAVU=off` bypasses Dejavu entirely for one command.
+- Agents that execute commands without a shell never read your profile and
+  are not covered — check with `dejavu doctor` from their terminal.
 - `dejavu stats --all` gives the cross-repo view of what global activation
   saves.
 
-To deactivate: remove the line from `~/.zprofile`.
+To deactivate: `dejavu shellenv --uninstall`.
 
 ## Example Output
 

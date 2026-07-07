@@ -35,6 +35,14 @@ pub fn generate_shims(ctx: &ShimContext) -> std::io::Result<usize> {
         let body = shim_script(name, &ctx.dejavu_bin);
         write_if_changed(&path, &body)?;
     }
+
+    // Self-shim: the reduced envelope tells the agent to run `dejavu show <id>`;
+    // that must work even when the binary itself is not otherwise on PATH.
+    // A plain exec (no `run --shim-name`), and deliberately no DEJAVU_BIN
+    // marker so `is_dejavu_shim` never mistakes it for a command shim.
+    let self_body = format!("#!/bin/sh\nexec \"{}\" \"$@\"\n", ctx.dejavu_bin.display());
+    write_if_changed(&ctx.shim_dir.join("dejavu"), &self_body)?;
+
     Ok(ctx.enabled.len())
 }
 

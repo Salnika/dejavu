@@ -57,6 +57,10 @@ pub enum PassthroughReason {
     /// A machine-readable git form (`--porcelain`, `-z`, `@{upstream}`, …) that a
     /// program parses — reducing it would corrupt shell prompts / IDE SCM.
     MachineReadable,
+    /// Global activation without an agent context: no session, no agent env
+    /// marker + TTY. The consumer is (or may be) a human terminal or a parser,
+    /// so output is never reduced.
+    NoAgentContext,
 }
 
 impl PassthroughReason {
@@ -73,6 +77,7 @@ impl PassthroughReason {
             PassthroughReason::DangerousDocker => "dangerous_docker",
             PassthroughReason::SideEffecting => "side_effecting",
             PassthroughReason::MachineReadable => "machine_readable",
+            PassthroughReason::NoAgentContext => "no_agent_context",
         }
     }
 }

@@ -121,7 +121,7 @@ pub fn run_shim(shim_name: &str, args: &[String]) -> anyhow::Result<i32> {
 
     let repo_disabled = state::is_repo_disabled(&ctx.layout);
     let stdin_tty = crate::exec::interactive::stdin_is_tty();
-    let classified = classify(
+    let mut classified = classify(
         shim_name,
         args,
         &ctx.config,
@@ -129,6 +129,16 @@ pub fn run_shim(shim_name: &str, args: &[String]) -> anyhow::Result<i32> {
         repo_disabled,
         stdin_tty,
     );
+
+    // Global-activation gate: reduce only for an agent (session, DEJAVU_FORCE,
+    // or agent marker + pty). A user terminal or an output-parsing program
+    // must always receive the raw output.
+    if matches!(classified.mode, ExecMode::Optimize { .. }) {
+        use std::io::IsTerminal;
+        if !env::reduction_allowed(std::io::stdout().is_terminal()) {
+            classified.mode = ExecMode::Passthrough(PassthroughReason::NoAgentContext);
+        }
+    }
 
     match &classified.mode {
         ExecMode::Passthrough(reason) => {
