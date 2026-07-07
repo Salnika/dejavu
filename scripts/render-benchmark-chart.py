@@ -23,24 +23,26 @@ THEMES = {
     "light": {
         "text": "#1f2328",
         "muted": "#59636e",
-        "track": "#eaeef2",
-        "bar": "#2da44e",
-        "accent": "#0969da",
+        "without": "#8c959f",
+        "with": "#2da44e",
+        "grid": "#eaeef2",
     },
     "dark": {
         "text": "#e6edf3",
         "muted": "#9198a1",
-        "track": "#30363d",
-        "bar": "#3fb950",
-        "accent": "#58a6ff",
+        "without": "#6e7681",
+        "with": "#3fb950",
+        "grid": "#30363d",
     },
 }
 
-WIDTH = 780
-LEFT = 190       # label column
-RIGHT_PAD = 150  # room for the % + token annotations
-ROW_H = 44
-BAR_H = 14
+WIDTH = 820
+CHART_TOP = 108      # below title + legend
+BASELINE = 330       # bars grow up from here
+MAX_BAR_H = 190
+BAR_W = 30
+BAR_GAP = 10
+GROUP_PAD_X = 40
 
 
 def fmt(n: int) -> str:
@@ -66,61 +68,95 @@ def esc(s: str) -> str:
 
 def render(theme: dict, data: dict) -> str:
     scenarios = data["scenarios"]
-    totals = data["totals"]
-    bar_w = WIDTH - LEFT - RIGHT_PAD
+    n = len(scenarios)
+    group_w = (WIDTH - 2 * GROUP_PAD_X) / n
+    pair_w = 2 * BAR_W + BAR_GAP
 
-    rows = []
-    y = 64
-    for sc in scenarios:
-        name = sc["name"]
-        if sc["all_passthrough"]:
-            # Safety row: passthrough by design, no bar.
-            rows.append(
-                f'<text x="{LEFT - 12}" y="{y + 11}" text-anchor="end" class="lbl">{esc(name)}</text>'
-                f'<text x="{LEFT}" y="{y + 11}" class="mut">passthrough by design — machine-readable git is never reduced ✓</text>'
-            )
-        else:
-            pct = sc["reduction_pct"]
-            filled = max(3, round(bar_w * min(pct, 100.0) / 100.0))
-            detail = f'{fmt(sc["raw_tokens"])} → {fmt(sc["emitted_tokens"])} tokens'
-            rows.append(
-                f'<text x="{LEFT - 12}" y="{y + 11}" text-anchor="end" class="lbl">{esc(name)}</text>'
-                f'<rect x="{LEFT}" y="{y}" width="{bar_w}" height="{BAR_H}" rx="7" class="track"/>'
-                f'<rect x="{LEFT}" y="{y}" width="{filled}" height="{BAR_H}" rx="7" class="bar"/>'
-                f'<text x="{LEFT + bar_w + 10}" y="{y + 11}" class="pct">{pct:.1f}%</text>'
-                f'<text x="{LEFT}" y="{y + 28}" class="mut sm">{detail}</text>'
-            )
-        y += ROW_H
-
-    y += 8
-    overall = totals["reduction_pct"]
-    filled = max(3, round(bar_w * min(overall, 100.0) / 100.0))
-    rows.append(
-        f'<line x1="24" y1="{y - 10}" x2="{WIDTH - 24}" y2="{y - 10}" class="rule"/>'
-        f'<text x="{LEFT - 12}" y="{y + 11}" text-anchor="end" class="lbl b">overall</text>'
-        f'<rect x="{LEFT}" y="{y}" width="{bar_w}" height="{BAR_H}" rx="7" class="track"/>'
-        f'<rect x="{LEFT}" y="{y}" width="{filled}" height="{BAR_H}" rx="7" class="bar"/>'
-        f'<text x="{LEFT + bar_w + 10}" y="{y + 12}" class="pct b">{overall:.1f}%</text>'
-        f'<text x="{LEFT}" y="{y + 28}" class="mut sm">{fmt(totals["saved_tokens"])} tokens saved across the suite</text>'
+    parts = []
+    # Faint gridline at the baseline.
+    parts.append(
+        f'<line x1="{GROUP_PAD_X - 10}" y1="{BASELINE}" x2="{WIDTH - GROUP_PAD_X + 10}" y2="{BASELINE}" class="rule"/>'
     )
-    height = y + 48
 
-    return f"""<svg xmlns="http://www.w3.org/2000/svg" width="{WIDTH}" height="{height}" viewBox="0 0 {WIDTH} {height}" role="img" aria-label="Dejavu benchmark: token reduction by scenario">
+    for i, sc in enumerate(scenarios):
+        cx = GROUP_PAD_X + group_w * i + group_w / 2
+        x_without = cx - pair_w / 2
+        x_with = x_without + BAR_W + BAR_GAP
+
+        raw = sc["raw_tokens"]
+        emitted = sc["emitted_tokens"]
+        # Bars are scaled per scenario ("without" = full height) so every
+        # comparison is readable; absolute token counts are labeled on top.
+        h_without = MAX_BAR_H
+        h_with = max(3, round(MAX_BAR_H * (emitted / raw))) if raw > 0 else 3
+
+        # Badge above the pair: reduction, or the safety statement. Floor to
+        # 0.1% so 99.98% shows as −99.9%, never a misleading −100%.
+        if sc["all_passthrough"]:
+            badge = '<tspan class="mutb">passthrough ✓</tspan>'
+        else:
+            floored = int(sc["reduction_pct"] * 10) / 10
+            badge = f"−{floored:.1f}%"
+        parts.append(
+            f'<text x="{cx}" y="{BASELINE - MAX_BAR_H - 34}" text-anchor="middle" class="pct">{badge}</text>'
+        )
+
+        # Token counts above each bar.
+        parts.append(
+            f'<text x="{x_without + BAR_W / 2}" y="{BASELINE - h_without - 6}" text-anchor="middle" class="cnt mut">{fmt(raw)}</text>'
+        )
+        parts.append(
+            f'<text x="{x_with + BAR_W / 2}" y="{BASELINE - h_with - 6}" text-anchor="middle" class="cnt withc">{fmt(emitted)}</text>'
+        )
+
+        # The bars.
+        parts.append(
+            f'<rect x="{x_without}" y="{BASELINE - h_without}" width="{BAR_W}" height="{h_without}" rx="4" class="without"/>'
+        )
+        parts.append(
+            f'<rect x="{x_with}" y="{BASELINE - h_with}" width="{BAR_W}" height="{h_with}" rx="4" class="with"/>'
+        )
+
+        # Scenario label under the group.
+        parts.append(
+            f'<text x="{cx}" y="{BASELINE + 20}" text-anchor="middle" class="lbl">{esc(sc["name"])}</text>'
+        )
+
+    # Legend (top right, kept well inside the canvas).
+    lx = WIDTH - 320
+    parts.append(
+        f'<rect x="{lx}" y="60" width="12" height="12" rx="3" class="without"/>'
+        f'<text x="{lx + 18}" y="71" class="sm">without Dejavu</text>'
+        f'<rect x="{lx + 140}" y="60" width="12" height="12" rx="3" class="with"/>'
+        f'<text x="{lx + 158}" y="71" class="sm">with Dejavu</text>'
+    )
+
+    totals = data["totals"]
+    footer = (
+        f'{fmt(totals["saved_tokens"])} tokens saved across the suite '
+        f'({totals["reduction_pct"]:.1f}% overall) · bars scaled per scenario, real token counts labeled'
+    )
+    height = BASELINE + 56
+
+    return f"""<svg xmlns="http://www.w3.org/2000/svg" width="{WIDTH}" height="{height}" viewBox="0 0 {WIDTH} {height}" role="img" aria-label="Dejavu benchmark: tokens an agent reads per scenario, with and without Dejavu">
   <style>
     text {{ font-family: -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif; font-size: 13px; fill: {theme['text']}; }}
-    .lbl {{ font-size: 13px; }}
-    .b   {{ font-weight: 600; }}
+    .lbl {{ font-size: 12.5px; }}
+    .sm  {{ font-size: 11.5px; fill: {theme['muted']}; }}
+    .cnt {{ font-size: 11px; font-variant-numeric: tabular-nums; }}
     .mut {{ fill: {theme['muted']}; }}
-    .sm  {{ font-size: 11px; }}
-    .pct {{ font-weight: 600; fill: {theme['bar']}; font-variant-numeric: tabular-nums; }}
-    .track {{ fill: {theme['track']}; }}
-    .bar {{ fill: {theme['bar']}; }}
-    .rule {{ stroke: {theme['track']}; stroke-width: 1; }}
+    .mutb {{ fill: {theme['muted']}; font-weight: 600; font-size: 12px; }}
+    .withc {{ fill: {theme['with']}; font-weight: 600; }}
+    .pct {{ font-weight: 700; font-size: 15px; fill: {theme['with']}; font-variant-numeric: tabular-nums; }}
+    .without {{ fill: {theme['without']}; }}
+    .with {{ fill: {theme['with']}; }}
+    .rule {{ stroke: {theme['grid']}; stroke-width: 1; }}
     .title {{ font-size: 15px; font-weight: 600; }}
   </style>
-  <text x="24" y="28" class="title">dejavu bench — token reduction by scenario</text>
-  <text x="24" y="46" class="mut sm">deterministic suite through the real classify + reduce pipeline · reproduce with `dejavu bench`</text>
-  {''.join(rows)}
+  <text x="{GROUP_PAD_X - 10}" y="28" class="title">Tokens the agent reads — with vs without Dejavu</text>
+  <text x="{GROUP_PAD_X - 10}" y="46" class="sm">deterministic suite through the real pipeline · reproduce with `dejavu bench`</text>
+  {''.join(parts)}
+  <text x="{GROUP_PAD_X - 10}" y="{BASELINE + 44}" class="sm">{footer}</text>
 </svg>
 """
 

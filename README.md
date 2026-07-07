@@ -263,7 +263,7 @@ CI fails if they regress (`dejavu bench --check`):
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/benchmark-dark.svg">
-  <img alt="Dejavu benchmark: token reduction by scenario — js-validation-loop 56.1%, git-workflow 90.8%, search-loop 93.1%, large-output 100%, machine-safety passthrough by design" src="docs/assets/benchmark-light.svg">
+  <img alt="Grouped bar chart: tokens the agent reads with vs without Dejavu — js-validation-loop 5,561 vs 2,443 (−56%), git-workflow 10,329 vs 954 (−91%), search-loop 9,346 vs 644 (−93%), large-output 1,057,554 vs 241 (−99.9%), machine-safety identical bars (passthrough by design)" src="docs/assets/benchmark-light.svg">
 </picture>
 
 Real agent sessions (small, early measurement):
