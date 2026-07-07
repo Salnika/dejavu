@@ -113,12 +113,13 @@ pub fn run_shim(shim_name: &str, args: &[String]) -> anyhow::Result<i32> {
         return passthrough_exec(&real, args, &cwd, &sanitized_path);
     }
 
-    // Fast path: outside any agent context (no session, no agent marker + pty,
-    // no DEJAVU_FORCE), nothing will ever be reduced — the consumer is a human
-    // terminal or an output-parsing program. Resolve and exec, full stop: no
-    // repo detection, no config load, no database, no recording. This keeps
-    // shell prompts and IDE internals at native speed under global activation,
-    // and keeps the user's own terminal history out of the local cache.
+    // Fast path: nothing here will ever be reduced — no dejavu session, no
+    // pipe-capturing agent (Claude Code / Codex / Cursor), no Copilot pty, and
+    // no DEJAVU_FORCE. The consumer is a human terminal or an output-parsing
+    // program, so resolve and exec, full stop: no repo detection, no config
+    // load, no database, no recording. This keeps shell prompts and IDE
+    // internals at native speed under global activation, and keeps the user's
+    // own terminal history out of the local cache.
     {
         use std::io::IsTerminal;
         if !env::reduction_allowed(std::io::stdout().is_terminal()) {

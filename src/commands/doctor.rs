@@ -221,6 +221,41 @@ pub fn run(json: bool) -> anyhow::Result<i32> {
         ));
     }
 
+    // Reduction gate: is THIS invocation eligible for reduction, and if not,
+    // why? Answers the most common confusion — "shims are on PATH but nothing
+    // looks compacted." (Under `dejavu doctor`, stdout is usually a pipe.)
+    {
+        use std::io::IsTerminal;
+        let tty = std::io::stdout().is_terminal();
+        let (status, detail): (&'static str, String) = if env::is_active() {
+            ("ok", "active — inside a `dejavu start` session".to_string())
+        } else if env::is_forced() {
+            ("ok", "active — DEJAVU_FORCE=1".to_string())
+        } else if env::pipe_agent_marker_present() {
+            (
+                "ok",
+                "active — a pipe-capturing agent (Claude Code / Codex / Cursor) is driving this shell"
+                    .to_string(),
+            )
+        } else if env::pty_agent_marker_present() && tty {
+            ("ok", "active — Copilot agent marker + terminal".to_string())
+        } else if env::pty_agent_marker_present() {
+            (
+                "warn",
+                "gated off — agent marker present but stdout is not a terminal; \
+                 run the command inside the agent, or set DEJAVU_FORCE=1"
+                    .to_string(),
+            )
+        } else {
+            (
+                "ok",
+                "passthrough — no agent context; your own commands run raw at native speed"
+                    .to_string(),
+            )
+        };
+        checks.push(chk("reduction", status, detail));
+    }
+
     // Real binary resolved per shim.
     let dejavu_dir = std::env::current_exe()
         .ok()

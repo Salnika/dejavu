@@ -133,14 +133,18 @@ Dejavu, with no `DEJAVU_*` variable needed: the repo context is rebuilt from
 the working directory, and shims self-identify to prevent recursion.
 
 Global activation is **agent-gated**: output is reduced only when an agent is
-actually reading it — inside a `dejavu start` session, or when the shell
-carries an agent marker (`AI_AGENT`, `COPILOT_AGENT`, `CLAUDECODE`, …) *and*
-output goes to a terminal. VS Code sets those markers in Copilot's agent
-terminals only, so:
+actually reading it.
 
-- Copilot agent mode gets reduced output;
-- your own terminals, scripts, pipelines, `$(git …)`, VS Code tasks and the
-  SCM view always get the raw output;
+- Pipe-capturing agents — Claude Code, the Codex CLI, Cursor's agent — set a
+  marker (`CLAUDECODE`, `CODEX_SANDBOX`, `CURSOR_AGENT`) in the shell they
+  drive and read command output through a pipe. They get reduced output
+  whenever that marker is present (no terminal required — the agent is the pipe
+  reader), exactly as under `dejavu start`.
+- VS Code Copilot runs commands in a real pty and sets `AI_AGENT` /
+  `COPILOT_AGENT` in its agent terminals only, so it gets reduced output when
+  the marker is present *and* output goes to a terminal.
+- Your own terminals, scripts, pipelines, `$(git …)`, VS Code tasks and the
+  SCM view always get the raw output.
 - `DEJAVU_FORCE=1` overrides the gate for custom setups.
 
 Other notes:

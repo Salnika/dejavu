@@ -264,12 +264,18 @@ None of the session variables are required: shims work from `PATH` alone
 (see `shellenv`).
 
 Under **global activation** (no session), reduction additionally requires an
-agent context: an agent marker in the environment (`AI_AGENT`,
-`COPILOT_AGENT`, `CLAUDECODE`, `CODEX_SANDBOX`, `CURSOR_AGENT`) **and** stdout
-being a terminal — or `DEJAVU_FORCE=1`. Anything else (your own terminals,
-pipelines, `$(…)` substitutions, IDE SCM) takes a fast path: the real binary
-is resolved and exec'd directly — raw output, native speed, and nothing is
-recorded in the cache.
+agent context — one of:
+
+- a **pipe-capturing** agent marker (`CLAUDECODE`, `CODEX_SANDBOX`,
+  `CURSOR_AGENT`): Claude Code, the Codex CLI and Cursor read command output
+  through a pipe, so no terminal is required; or
+- a **pty-based** agent marker (`AI_AGENT`, `COPILOT_AGENT`, set by VS Code
+  Copilot) **and** stdout being a terminal; or
+- `DEJAVU_FORCE=1`.
+
+Anything else (your own terminals, pipelines, `$(…)` substitutions, IDE SCM)
+takes a fast path: the real binary is resolved and exec'd directly — raw
+output, native speed, and nothing is recorded in the cache.
 
 ---
 

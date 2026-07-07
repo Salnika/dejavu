@@ -83,6 +83,60 @@ fn shellenv_generates_global_shims_and_activates_interception() {
 }
 
 #[test]
+fn pipe_agent_marker_reduces_without_a_tty() {
+    // Claude Code / Codex CLI / Cursor drive the shell but capture command
+    // output through a PIPE, so stdout is never a terminal. A pipe-capturing
+    // agent marker must engage reduction on its own — no DEJAVU_FORCE, no tty.
+    let home = tempfile::tempdir().unwrap();
+    let fake = tempfile::tempdir().unwrap();
+    let proj = tempfile::tempdir().unwrap();
+    write_exec(
+        fake.path(),
+        "pnpm",
+        "#!/bin/sh\ni=1\nwhile [ \"$i\" -le 200 ]; do echo \"validation line $i stable output padding content\"; i=$((i+1)); done\nexit 0\n",
+    );
+
+    let line = String::from_utf8_lossy(
+        &dejavu_cmd()
+            .env("HOME", home.path())
+            .env("XDG_CACHE_HOME", home.path().join(".cache"))
+            .arg("shellenv")
+            .output()
+            .unwrap()
+            .stdout,
+    )
+    .trim()
+    .to_string();
+
+    let dejavu_bin_dir = assert_cmd::cargo::cargo_bin("dejavu");
+    let base_path = format!(
+        "{}:{}:/usr/bin:/bin",
+        fake.path().display(),
+        dejavu_bin_dir.parent().unwrap().display(),
+    );
+    let script = format!(
+        "{line}\ncd {} && pnpm test && pnpm test",
+        proj.path().display()
+    );
+    // CLAUDECODE=1 is the only agent signal; stdout here is a pipe (no tty).
+    let out = StdCommand::new("/bin/sh")
+        .arg("-c")
+        .arg(&script)
+        .env_clear()
+        .env("HOME", home.path())
+        .env("XDG_CACHE_HOME", home.path().join(".cache"))
+        .env("PATH", &base_path)
+        .env("CLAUDECODE", "1")
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    let text = String::from_utf8_lossy(&out.stdout);
+    // The second identical run is deduplicated into an "unchanged" envelope,
+    // exactly as under `dejavu start`.
+    assert!(text.contains("unchanged"), "output: {text}");
+}
+
+#[test]
 fn global_mode_without_agent_context_never_reduces() {
     let home = tempfile::tempdir().unwrap();
     let fake = tempfile::tempdir().unwrap();
