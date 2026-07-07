@@ -35,3 +35,6 @@ jobs:
 
       - name: Test
         run: cargo test --all --locked
+
+      - name: Benchmark regression gate
+        run: cargo run --locked -- bench --check

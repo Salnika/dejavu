@@ -121,14 +121,17 @@ pub enum DejavuCmd {
         redact: bool,
     },
 
-    /// Run a reproducible local benchmark (no LLM required).
+    /// Run a reproducible local benchmark suite (no LLM required).
     Bench {
-        /// Benchmark scenario to run (default: js-validation-loop).
+        /// Scenario to run (default: all). See the report for available names.
         #[arg(long)]
         scenario: Option<String>,
         /// Emit the benchmark report as JSON instead of text.
         #[arg(long)]
         json: bool,
+        /// Fail (exit 2) if any scenario misses its expectations — CI gate.
+        #[arg(long)]
+        check: bool,
     },
 
     /// Remove cached runs and logs.

@@ -175,16 +175,21 @@ Emit a Markdown report for the current repo, suitable for sharing.
 
 ### `dejavu bench [OPTIONS]`
 
-Run a reproducible local benchmark through the real reduction pipeline — no
-LLM, no network, no toolchain needed (canned fixture outputs).
+Run a reproducible local benchmark suite through the REAL classify + reduce
+pipeline — no LLM, no network, no toolchain needed (deterministic synthetic
+outputs).
 
 | Option | Meaning |
 |---|---|
-| `--scenario <SCENARIO>` | Scenario to run (default and only built-in: `js-validation-loop`) |
+| `--scenario <NAME>` | Run one scenario (default: all) |
 | `--json` | Emit the benchmark report as JSON instead of text |
+| `--check` | Fail (exit 2) if any scenario misses its expectations — used as a CI regression gate |
 
-The scenario exercises every state: first seen, unchanged, small delta, large
-delta, and fail→pass.
+Scenarios: `js-validation-loop` (every state + fail→pass), `git-workflow`,
+`search-loop`, `large-output` (caps/truncation), and `machine-safety` (asserts
+machine-readable git forms are NEVER reduced). The full run also reports an
+end-to-end latency micro-bench (p50/p95 per command, spawning the real binary
+— reported, never gated).
 
 ---
 

@@ -80,7 +80,11 @@ pub fn run(cli: Cli) -> anyhow::Result<i32> {
             normalized,
         } => crate::commands::grep::run(&target, &pattern, normalized),
         DejavuCmd::Doctor { json } => crate::commands::doctor::run(json),
-        DejavuCmd::Bench { scenario, json } => crate::commands::bench::run(scenario, json),
+        DejavuCmd::Bench {
+            scenario,
+            json,
+            check,
+        } => crate::commands::bench::run(scenario, json, check),
         DejavuCmd::Clean { older_than, all } => crate::commands::clean::run(older_than, all),
         DejavuCmd::Uninstall => crate::commands::clean::uninstall(),
     }

@@ -2,10 +2,22 @@
 
 This demo creates a temporary fake project and fake `pnpm` binary. It is deterministic and does not touch your source tree.
 
-Run:
+Run the scripted tour:
 
 ```bash
 demo/run-demo.sh
+```
+
+Or drop into a live `dejavu start` shell inside the prepared project (what the
+GIF records) and type the commands yourself:
+
+```bash
+demo/session.sh
+pnpm test                      # big failing output -> bounded summary
+pnpm test                      # unchanged -> deduplicated
+sed -i.bak 's/subtotal + discount/subtotal - discount/' src/billing.ts
+pnpm test                      # "command now passes."
+dejavu stats
 ```
 
 The demo shows:
