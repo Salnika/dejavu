@@ -51,7 +51,11 @@ struct RunCtx {
 }
 
 impl RunCtx {
-    fn resolve(cwd: &Path, agent: Option<&AgentEnv>) -> anyhow::Result<RunCtx> {
+    fn resolve(
+        cwd: &Path,
+        agent: Option<&AgentEnv>,
+        git: &repo::GitInvoker,
+    ) -> anyhow::Result<RunCtx> {
         let (repo_root, layout, session_id) = if let Some(a) = agent {
             (
                 a.repo_root.clone(),
@@ -59,7 +63,7 @@ impl RunCtx {
                 a.session_id.clone(),
             )
         } else {
-            let root = repo::detect_repo_root(cwd);
+            let root = git.detect_repo_root(cwd);
             let layout = CacheLayout::for_repo(&root)?;
             let sid = std::env::var(env::SESSION_ID).unwrap_or_else(|_| "no-session".to_string());
             (root, layout, sid)
@@ -86,19 +90,24 @@ pub fn run_shim(shim_name: &str, args: &[String]) -> anyhow::Result<i32> {
         .as_ref()
         .map(|a| a.shim_dir.clone())
         .or_else(|| std::env::var_os(env::SHIM_DIR).map(PathBuf::from))
+        .or_else(|| {
+            // Global activation sets no DEJAVU_* env: the shim lives in the
+            // repo-independent global dir. Knowing the right dir here both
+            // speeds resolution (dir compare instead of content sniffing) and
+            // lets `without_dir` actually sanitize the child PATH.
+            crate::paths::global_shims_bin().ok().filter(|d| d.is_dir())
+        })
         .unwrap_or_else(|| dejavu_dir.clone());
 
     let path_os = std::env::var_os("PATH").unwrap_or_default();
+    let resolve_env = resolve::ResolveEnv {
+        path: &path_os,
+        shim_dir: &shim_dir,
+        dejavu_dir: &dejavu_dir,
+    };
 
     // Resolve the real binary. Not found → behave like the shell: 127.
-    let real = match resolve::resolve_real(
-        shim_name,
-        &resolve::ResolveEnv {
-            path: &path_os,
-            shim_dir: &shim_dir,
-            dejavu_dir: &dejavu_dir,
-        },
-    ) {
+    let real = match resolve::resolve_real(shim_name, &resolve_env) {
         Some(p) => p,
         None => {
             eprintln!("{shim_name}: command not found");
@@ -127,8 +136,20 @@ pub fn run_shim(shim_name: &str, args: &[String]) -> anyhow::Result<i32> {
         }
     }
 
+    // Internal git metadata queries spawn the resolved real git directly
+    // against the sanitized PATH — one process per query instead of
+    // re-entering a shim (`sh → dejavu → git`).
+    let git = repo::GitInvoker::resolved(
+        if shim_name == "git" {
+            real.clone()
+        } else {
+            resolve::resolve_real("git", &resolve_env).unwrap_or_else(|| PathBuf::from("git"))
+        },
+        sanitized_path.clone(),
+    );
+
     // Build context; any failure → safe passthrough (never break the command).
-    let ctx = match RunCtx::resolve(&cwd, agent.as_ref()) {
+    let ctx = match RunCtx::resolve(&cwd, agent.as_ref(), &git) {
         Ok(c) => c,
         Err(_) => return passthrough_exec(&real, args, &cwd, &sanitized_path),
     };
@@ -163,9 +184,15 @@ pub fn run_shim(shim_name: &str, args: &[String]) -> anyhow::Result<i32> {
                 inherit_stdin: !stdin_tty,
                 capture_limit: Some(ctx.config.max_raw_output_bytes as usize),
             };
+            // Capture git state concurrently with the real command — `git
+            // status` on a large worktree costs hundreds of ms, fully hidden
+            // whenever the command outlasts it. Joined at store time.
+            let git_state = repo::GitStatePrefetch::spawn(git.clone(), ctx.repo_root.clone());
             let outcome = match RealRunner.run(&spec) {
                 Ok(o) => o,
                 // Could not spawn despite resolving — fall back to passthrough.
+                // The prefetch handle is dropped: its read-only git queries
+                // finish on their own in the background.
                 Err(_) => return passthrough_exec(&real, args, &cwd, &sanitized_path),
             };
 
@@ -180,7 +207,7 @@ pub fn run_shim(shim_name: &str, args: &[String]) -> anyhow::Result<i32> {
 
             // Exit-code guard: reduction/recording must never change the code.
             let built = std::panic::catch_unwind(AssertUnwindSafe(|| {
-                finalize_optimized(&ctx, &meta, &outcome, started)
+                finalize_optimized(&ctx, &meta, &outcome, started, git_state)
             }));
             let plan = match built {
                 Ok(Ok(plan)) => plan,
@@ -216,6 +243,7 @@ fn finalize_optimized(
     meta: &OptimizedMeta,
     outcome: &crate::exec::ExecOutcome,
     started: Instant,
+    git_state: repo::GitStatePrefetch,
 ) -> anyhow::Result<EmitPlan> {
     let cfg = &ctx.config;
     let run_id = util::new_id();
@@ -231,8 +259,10 @@ fn finalize_optimized(
         (outcome.stdout.clone(), outcome.stderr.clone())
     };
 
-    let git_head = repo::git_head(&ctx.repo_root);
-    let git_worktree = repo::git_worktree_hash(&ctx.repo_root);
+    // Join the git-state capture started before the command ran.
+    let git_state = git_state.join();
+    let git_head = git_state.head;
+    let git_worktree = git_state.worktree_hash;
     let repo_root_s = ctx.repo_root.to_string_lossy().into_owned();
     let cwd_s = ctx.cwd.to_string_lossy().into_owned();
 

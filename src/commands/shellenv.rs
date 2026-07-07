@@ -25,7 +25,7 @@ const END: &str = "# <<< dejavu shellenv <<<";
 /// with per-repo caches (`<cache_root>/<16-hex-hash>/`) and holds no
 /// `runs.sqlite`, so `stats --all` skips it.
 pub fn global_shim_dir() -> anyhow::Result<PathBuf> {
-    Ok(crate::paths::cache_root()?.join("shims").join("bin"))
+    Ok(crate::paths::global_shims_bin()?)
 }
 
 pub fn run(install: bool, uninstall: bool, shell: Option<String>) -> anyhow::Result<i32> {

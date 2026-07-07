@@ -24,6 +24,13 @@ pub fn cache_root() -> Result<PathBuf, PathError> {
     Ok(base.join("dejavu"))
 }
 
+/// The repo-independent shim dir used by global activation (`dejavu
+/// shellenv`): `<cache_root>/shims/bin`. Never collides with per-repo caches
+/// (`<cache_root>/<16-hex-hash>/`).
+pub fn global_shims_bin() -> Result<PathBuf, PathError> {
+    Ok(cache_root()?.join("shims").join("bin"))
+}
+
 /// Global config file: `$XDG_CONFIG_HOME/dejavu/config.toml`, else
 /// `~/.config/dejavu/config.toml` — XDG on every platform.
 pub fn config_file_path() -> Result<PathBuf, PathError> {
