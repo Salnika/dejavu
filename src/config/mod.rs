@@ -52,6 +52,11 @@ pub struct InterceptConfig {
     pub ls: bool,
     pub tree: bool,
     pub docker: bool,
+    /// User-added command names to intercept, e.g. `extra = ["vitest", "make"]`.
+    /// Each gets a shim and is reduced generically (validation family: dedup,
+    /// deltas, bounded summaries, parser sniffing) with the usual guards
+    /// (watch-mode passthrough, min-token floor, agent gating).
+    pub extra: Vec<String>,
 }
 
 impl InterceptConfig {
@@ -74,17 +79,39 @@ impl InterceptConfig {
             "ls" => self.ls,
             "tree" => self.tree,
             "docker" => self.docker,
-            _ => false,
+            _ => self.is_extra(shim),
         }
     }
 
-    /// The enabled shim names, in a stable order.
-    pub fn enabled_shims(&self) -> Vec<&'static str> {
-        SHIM_NAMES
+    /// Whether a name comes from the user's `extra` list (and is not a builtin
+    /// — builtins keep their specialized classification).
+    pub fn is_extra(&self, shim: &str) -> bool {
+        !SHIM_NAMES.contains(&shim) && self.sane_extra().any(|e| e == shim)
+    }
+
+    /// The enabled shim names (builtins in stable order, then extras).
+    pub fn enabled_shims(&self) -> Vec<String> {
+        let mut out: Vec<String> = SHIM_NAMES
             .iter()
-            .copied()
             .filter(|name| self.is_enabled(name))
-            .collect()
+            .map(|s| s.to_string())
+            .collect();
+        for extra in self.sane_extra() {
+            if !SHIM_NAMES.contains(&extra) && !out.iter().any(|o| o == extra) {
+                out.push(extra.to_string());
+            }
+        }
+        out
+    }
+
+    /// `extra` entries that are safe to use as shim file names.
+    fn sane_extra(&self) -> impl Iterator<Item = &str> {
+        self.extra.iter().map(String::as_str).filter(|name| {
+            !name.is_empty()
+                && *name != "dejavu"
+                && !name.contains('/')
+                && !name.contains(char::is_whitespace)
+        })
     }
 }
 
@@ -193,9 +220,50 @@ mod tests {
         c.intercept.docker = false;
         c.intercept.go = false;
         let shims = c.intercept.enabled_shims();
-        assert!(shims.contains(&"git"));
-        assert!(!shims.contains(&"docker"));
-        assert!(!shims.contains(&"go"));
+        assert!(shims.iter().any(|s| s == "git"));
+        assert!(!shims.iter().any(|s| s == "docker"));
+        assert!(!shims.iter().any(|s| s == "go"));
         assert_eq!(shims.len(), SHIM_NAMES.len() - 2);
+    }
+
+    #[test]
+    fn extra_commands_are_intercepted_and_sanitized() {
+        let mut c = Config::default();
+        c.intercept.extra = vec![
+            "vitest".to_string(),
+            "make".to_string(),
+            "git".to_string(),       // builtin: not an extra, no duplicate shim
+            "dejavu".to_string(),    // reserved: dropped
+            "a/b".to_string(),       // path separator: dropped
+            "has space".to_string(), // whitespace: dropped
+            String::new(),           // empty: dropped
+        ];
+
+        assert!(c.intercept.is_extra("vitest"));
+        assert!(c.intercept.is_extra("make"));
+        assert!(!c.intercept.is_extra("git")); // builtin keeps its classifier
+        assert!(!c.intercept.is_extra("dejavu"));
+        assert!(!c.intercept.is_extra("a/b"));
+
+        assert!(c.intercept.is_enabled("vitest"));
+
+        let shims = c.intercept.enabled_shims();
+        assert!(shims.iter().any(|s| s == "vitest"));
+        assert!(shims.iter().any(|s| s == "make"));
+        assert_eq!(
+            shims.iter().filter(|s| s.as_str() == "git").count(),
+            1,
+            "builtin listed once even when repeated in extra"
+        );
+        assert_eq!(shims.len(), SHIM_NAMES.len() + 2);
+    }
+
+    #[test]
+    fn extra_parses_from_toml() {
+        let c: Config =
+            toml::from_str("[intercept]\nextra = [\"vitest\", \"jest\"]\ngit = false\n").unwrap();
+        assert!(c.intercept.is_extra("vitest"));
+        assert!(c.intercept.is_extra("jest"));
+        assert!(!c.intercept.git);
     }
 }

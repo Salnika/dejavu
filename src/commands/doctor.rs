@@ -146,7 +146,7 @@ pub fn run(json: bool) -> anyhow::Result<i32> {
         for name in &enabled {
             let expected = active_dir.join(name);
             if !first_on_path(name, &path).is_some_and(|p| same_path(&p, &expected)) {
-                not_via_shim.push(*name);
+                not_via_shim.push(name.clone());
             }
         }
     }
@@ -185,7 +185,8 @@ pub fn run(json: bool) -> anyhow::Result<i32> {
     // Shims baked against a debug binary keep the cost even after a rebuild.
     let mut debug_shims = Vec::new();
     for dir in [Some(&shim_dir), global_dir.as_ref()].into_iter().flatten() {
-        for name in enabled.iter().chain(std::iter::once(&"dejavu")) {
+        let self_shim = "dejavu".to_string();
+        for name in enabled.iter().chain(std::iter::once(&self_shim)) {
             if let Ok(body) = std::fs::read_to_string(dir.join(name)) {
                 if body.contains("/target/debug/") {
                     debug_shims.push(format!("{}", dir.join(name).display()));
@@ -241,7 +242,7 @@ pub fn run(json: bool) -> anyhow::Result<i32> {
                 examples.push(format!("{name}={}", path.display()));
             }
             Some(_) => {}
-            None => missing.push(*name),
+            None => missing.push(name.clone()),
         }
     }
     checks.push(Check {
@@ -350,7 +351,7 @@ fn same_path(a: &Path, b: &Path) -> bool {
     }
 }
 
-fn summarize(names: &[&str]) -> String {
+fn summarize(names: &[String]) -> String {
     const MAX: usize = 8;
     if names.len() <= MAX {
         return names.join(", ");

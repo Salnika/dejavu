@@ -42,6 +42,7 @@ impl Default for InterceptConfig {
             ls: true,
             tree: true,
             docker: true,
+            extra: Vec::new(),
         }
     }
 }

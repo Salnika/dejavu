@@ -303,4 +303,12 @@ find = true
 ls = true
 tree = true
 docker = true
+extra = []                            # your own commands, e.g. ["vitest", "make"]
 ```
+
+`extra` entries each get a shim and generic validation-style reduction (dedup,
+deltas, bounded summaries, test-runner output sniffing). Watch modes pass
+through, the min-token floor and agent gating apply, and builtins listed in
+`extra` keep their specialized policy (e.g. `git` mutating subcommands still
+pass through). Removing a name sweeps its shim on the next `dejavu start` /
+`dejavu shellenv --install`.

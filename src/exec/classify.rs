@@ -89,9 +89,25 @@ pub fn classify(
         "ls" | "tree" => classify_listing(shim, args),
         "git" => classify_git(args),
         "docker" => classify_docker(args),
+        // User-elected `[intercept] extra` commands: generic validation
+        // treatment (builtins above always take precedence).
+        _ if cfg.intercept.is_extra(shim) => classify_extra(shim, args),
         _ => Passthrough(R::UnknownShim),
     };
     wrap(mode)
+}
+
+/// A user-added command from `[intercept] extra`. Reduced generically as a
+/// validation-style command; the standard guards still apply (watch-mode
+/// passthrough here, plus the min-token floor and agent gating downstream).
+fn classify_extra(shim: &str, args: &[String]) -> ExecMode {
+    if has_watch_flag(args) || is_known_interactive(shim, first_positional(args).map(|(_, s)| s)) {
+        return Passthrough(R::Interactive);
+    }
+    Optimize {
+        family: Family::Validation,
+        command_key: build_key(&format!("validation:{shim}"), &drop_noise(args)),
+    }
 }
 
 /// First token not starting with `-` (the subcommand), with its index.
@@ -413,6 +429,55 @@ mod tests {
                 "git {sub} must pass through"
             );
         }
+    }
+
+    #[test]
+    fn extra_commands_classify_as_generic_validation() {
+        let mut cfg = Config::default();
+        cfg.intercept.extra = vec!["vitest".to_string()];
+
+        // Optimized with a validation key.
+        let c = classify(
+            "vitest",
+            &["run".to_string(), "--color=always".to_string()],
+            &cfg,
+            false,
+            false,
+            false,
+        );
+        match &c.mode {
+            Optimize {
+                family,
+                command_key,
+            } => {
+                assert_eq!(*family, Family::Validation);
+                assert_eq!(command_key, "validation:vitest:run");
+            }
+            other => panic!("expected Optimize, got {other:?}"),
+        }
+
+        // Watch mode passes through.
+        let c = classify(
+            "vitest",
+            &["--watch".to_string()],
+            &cfg,
+            false,
+            false,
+            false,
+        );
+        assert!(matches!(c.mode, Passthrough(R::Interactive)));
+
+        // Not in extra -> excluded by the config gate (never optimized).
+        let c = classify("randomtool", &[], &cfg, false, false, false);
+        assert!(matches!(
+            c.mode,
+            Passthrough(R::ConfigExcluded | R::UnknownShim)
+        ));
+
+        // A builtin listed in extra keeps its specialized policy.
+        cfg.intercept.extra.push("git".to_string());
+        let c = classify("git", &["commit".to_string()], &cfg, false, false, false);
+        assert!(matches!(c.mode, Passthrough(R::MutatingGit)));
     }
 
     #[test]

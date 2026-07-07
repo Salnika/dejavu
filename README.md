@@ -234,6 +234,18 @@ Dejavu defaults to passthrough. It optimizes only command shapes it recognizes a
 | Files and trees | `find` without side-effecting primaries, `ls`, `tree` |
 | Git read-only | `git status`, `git diff`, `git log`, `git show` (human forms only — scripting/machine forms like `--porcelain`, `-s`, `--name-only`, `--numstat`, `--format`, `-z`, `@{upstream}` pass through so shell prompts, IDE SCM, hooks, and `$(git …)` keep parsing them) |
 | Logs | `docker logs`, `docker compose logs` |
+| Your own commands | anything you list in `[intercept] extra` (see below) |
+
+Add any command you want intercepted via the config — it gets a shim and the
+generic reduction (dedup, deltas, bounded summaries, test-runner output
+sniffing), with the usual guards (watch modes pass through, execution is never
+skipped):
+
+```toml
+# ~/.config/dejavu/config.toml
+[intercept]
+extra = ["vitest", "jest", "make", "terraform"]
+```
 
 Examples of commands that pass through unchanged:
 

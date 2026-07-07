@@ -14,19 +14,34 @@ pub struct ShimContext {
     /// Absolute path to the `dejavu` binary, baked in as the fallback when
     /// `DEJAVU_BIN` is unset.
     pub dejavu_bin: PathBuf,
-    pub enabled: Vec<&'static str>,
+    /// Builtin + user `[intercept] extra` names to generate shims for.
+    pub enabled: Vec<String>,
 }
 
-/// Generate/refresh shims for the enabled set; remove shims for disabled ones so
-/// `which` no longer finds them. Returns the number of enabled shims.
+/// Generate/refresh shims for the enabled set; remove shims for anything else
+/// (disabled builtins AND `extra` entries removed from config) so `which` no
+/// longer finds them. Returns the number of enabled shims.
 pub fn generate_shims(ctx: &ShimContext) -> std::io::Result<usize> {
     std::fs::create_dir_all(&ctx.shim_dir)?;
-    let enabled: HashSet<&str> = ctx.enabled.iter().copied().collect();
+    let enabled: HashSet<&str> = ctx.enabled.iter().map(String::as_str).collect();
 
-    for name in SHIM_NAMES {
-        let path = ctx.shim_dir.join(name);
-        if !enabled.contains(name) && path.exists() {
-            let _ = std::fs::remove_file(&path);
+    // Content-based sweep: a generated command shim is self-identifying (it
+    // contains the DEJAVU_BIN marker), so we can safely remove stale ones
+    // without keeping a registry of past names. The `dejavu` self-shim and
+    // any foreign file are left untouched.
+    if let Ok(entries) = std::fs::read_dir(&ctx.shim_dir) {
+        for entry in entries.flatten() {
+            let name = entry.file_name();
+            let Some(name) = name.to_str() else { continue };
+            if name == "dejavu" || enabled.contains(name) {
+                continue;
+            }
+            let path = entry.path();
+            if std::fs::read_to_string(&path)
+                .is_ok_and(|body| body.starts_with("#!/bin/sh") && body.contains("DEJAVU_BIN"))
+            {
+                let _ = std::fs::remove_file(&path);
+            }
         }
     }
 
@@ -89,7 +104,7 @@ mod tests {
         let ctx = ShimContext {
             shim_dir: shim_dir.clone(),
             dejavu_bin: PathBuf::from("/opt/dejavu"),
-            enabled: vec!["pnpm", "git"],
+            enabled: vec!["pnpm".to_string(), "git".to_string()],
         };
         let n = generate_shims(&ctx).unwrap();
         assert_eq!(n, 2);
@@ -106,7 +121,7 @@ mod tests {
         let ctx2 = ShimContext {
             shim_dir: shim_dir.clone(),
             dejavu_bin: PathBuf::from("/opt/dejavu"),
-            enabled: vec!["git"],
+            enabled: vec!["git".to_string()],
         };
         generate_shims(&ctx2).unwrap();
         assert!(!pnpm.exists());
