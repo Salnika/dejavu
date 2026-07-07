@@ -54,7 +54,11 @@ impl GitInvoker {
     /// The repo root via `git rev-parse --show-toplevel`, falling back to `cwd`
     /// (canonicalized) when not inside a git repo.
     pub fn detect_repo_root(&self, cwd: &Path) -> PathBuf {
-        if let Ok(out) = self.cmd(cwd).args(["rev-parse", "--show-toplevel"]).output() {
+        if let Ok(out) = self
+            .cmd(cwd)
+            .args(["rev-parse", "--show-toplevel"])
+            .output()
+        {
             if out.status.success() {
                 let text = String::from_utf8_lossy(&out.stdout);
                 let trimmed = text.trim();
@@ -68,7 +72,11 @@ impl GitInvoker {
 
     /// The current commit hash, if the repo has one.
     pub fn head(&self, repo_root: &Path) -> Option<String> {
-        let out = self.cmd(repo_root).args(["rev-parse", "HEAD"]).output().ok()?;
+        let out = self
+            .cmd(repo_root)
+            .args(["rev-parse", "HEAD"])
+            .output()
+            .ok()?;
         if out.status.success() {
             let text = String::from_utf8_lossy(&out.stdout);
             let trimmed = text.trim();
@@ -122,7 +130,10 @@ pub struct GitState {
 pub enum GitStatePrefetch {
     Spawned(std::thread::JoinHandle<GitState>),
     /// Thread spawn failed — compute inline at join time.
-    Inline { invoker: GitInvoker, repo_root: PathBuf },
+    Inline {
+        invoker: GitInvoker,
+        repo_root: PathBuf,
+    },
 }
 
 impl GitStatePrefetch {
@@ -162,8 +173,7 @@ mod tests {
     #[test]
     fn prefetch_joins_to_nones_outside_a_repo() {
         let tmp = tempfile::tempdir().unwrap();
-        let state =
-            GitStatePrefetch::spawn(GitInvoker::default(), tmp.path().to_path_buf()).join();
+        let state = GitStatePrefetch::spawn(GitInvoker::default(), tmp.path().to_path_buf()).join();
         assert!(state.head.is_none());
         assert!(state.worktree_hash.is_none());
     }
@@ -188,15 +198,13 @@ mod tests {
         run(&["add", "-A"]);
         run(&["-c", "commit.gpgsign=false", "commit", "-qm", "init"]);
 
-        let state =
-            GitStatePrefetch::spawn(GitInvoker::default(), tmp.path().to_path_buf()).join();
+        let state = GitStatePrefetch::spawn(GitInvoker::default(), tmp.path().to_path_buf()).join();
         assert!(state.head.is_some(), "HEAD should exist after a commit");
         assert!(state.worktree_hash.is_some());
 
         // The worktree hash moves when the tree changes.
         std::fs::write(tmp.path().join("g.txt"), "y").unwrap();
-        let dirty =
-            GitStatePrefetch::spawn(GitInvoker::default(), tmp.path().to_path_buf()).join();
+        let dirty = GitStatePrefetch::spawn(GitInvoker::default(), tmp.path().to_path_buf()).join();
         assert_ne!(state.worktree_hash, dirty.worktree_hash);
     }
 }

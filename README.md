@@ -233,9 +233,9 @@ Dejavu defaults to passthrough. It optimizes only command shapes it recognizes a
 
 | Family | Optimized forms |
 |---|---|
-| JavaScript package managers | `npm`, `pnpm`, `yarn`, `bun` for `test`, `lint`, `typecheck`, `build` scripts |
-| Type and lint | `tsc`, `eslint` without `--fix` or `--fix-dry-run` |
-| Tests | `pytest`, `cargo test`, `go test` |
+| JavaScript package managers | `npm`, `pnpm`, `yarn`, `bun` for `test`, `lint`, `typecheck`, `build` scripts — including `test:*` / `lint:*` / `build:*` / `typecheck:*` variants (watch/fix/dev/serve flavors excluded) |
+| Type and lint | `tsc`, `eslint` without `--fix` or `--fix-dry-run`, `cargo clippy` / `cargo check` without `--fix` |
+| Tests | `vitest run`, `jest`, `pytest`, `cargo test`, `go test` (watch modes and snapshot updates pass through) |
 | Search | `rg`, `grep` |
 | Files and trees | `find` without side-effecting primaries, `ls`, `tree` |
 | Git read-only | `git status`, `git diff`, `git log`, `git show` (human forms only — scripting/machine forms like `--porcelain`, `-s`, `--name-only`, `--numstat`, `--format`, `-z`, `@{upstream}` pass through so shell prompts, IDE SCM, hooks, and `$(git …)` keep parsing them) |
@@ -250,7 +250,7 @@ skipped):
 ```toml
 # ~/.config/dejavu/config.toml
 [intercept]
-extra = ["vitest", "jest", "make", "terraform"]
+extra = ["make", "terraform", "just"]
 ```
 
 Examples of commands that pass through unchanged:

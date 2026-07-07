@@ -32,6 +32,8 @@ impl Default for InterceptConfig {
             bun: true,
             tsc: true,
             eslint: true,
+            vitest: true,
+            jest: true,
             pytest: true,
             cargo: true,
             go: true,

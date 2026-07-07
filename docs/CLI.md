@@ -306,6 +306,8 @@ yarn = true
 bun = true
 tsc = true
 eslint = true
+vitest = true
+jest = true
 pytest = true
 cargo = true
 go = true
@@ -316,7 +318,7 @@ find = true
 ls = true
 tree = true
 docker = true
-extra = []                            # your own commands, e.g. ["vitest", "make"]
+extra = []                            # your own commands, e.g. ["make", "terraform"]
 ```
 
 `extra` entries each get a shim and generic validation-style reduction (dedup,

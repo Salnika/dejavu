@@ -12,7 +12,7 @@ use std::path::Path;
 /// source of truth; `exec::shim` generates a shim for each enabled entry.
 pub const SHIM_NAMES: &[&str] = &[
     "npm", "pnpm", "yarn", "bun", "git", "rg", "grep", "find", "ls", "tree", "tsc", "eslint",
-    "pytest", "cargo", "go", "docker",
+    "vitest", "jest", "pytest", "cargo", "go", "docker",
 ];
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -42,6 +42,8 @@ pub struct InterceptConfig {
     pub bun: bool,
     pub tsc: bool,
     pub eslint: bool,
+    pub vitest: bool,
+    pub jest: bool,
     pub pytest: bool,
     pub cargo: bool,
     pub go: bool,
@@ -52,7 +54,7 @@ pub struct InterceptConfig {
     pub ls: bool,
     pub tree: bool,
     pub docker: bool,
-    /// User-added command names to intercept, e.g. `extra = ["vitest", "make"]`.
+    /// User-added command names to intercept, e.g. `extra = ["make", "terraform"]`.
     /// Each gets a shim and is reduced generically (validation family: dedup,
     /// deltas, bounded summaries, parser sniffing) with the usual guards
     /// (watch-mode passthrough, min-token floor, agent gating).
@@ -69,6 +71,8 @@ impl InterceptConfig {
             "bun" => self.bun,
             "tsc" => self.tsc,
             "eslint" => self.eslint,
+            "vitest" => self.vitest,
+            "jest" => self.jest,
             "pytest" => self.pytest,
             "cargo" => self.cargo,
             "go" => self.go,
@@ -230,8 +234,9 @@ mod tests {
     fn extra_commands_are_intercepted_and_sanitized() {
         let mut c = Config::default();
         c.intercept.extra = vec![
-            "vitest".to_string(),
+            "mytool".to_string(),
             "make".to_string(),
+            "vitest".to_string(),    // builtin now: not an extra, no dup shim
             "git".to_string(),       // builtin: not an extra, no duplicate shim
             "dejavu".to_string(),    // reserved: dropped
             "a/b".to_string(),       // path separator: dropped
@@ -239,31 +244,36 @@ mod tests {
             String::new(),           // empty: dropped
         ];
 
-        assert!(c.intercept.is_extra("vitest"));
+        assert!(c.intercept.is_extra("mytool"));
         assert!(c.intercept.is_extra("make"));
+        assert!(!c.intercept.is_extra("vitest")); // builtin keeps its classifier
         assert!(!c.intercept.is_extra("git")); // builtin keeps its classifier
         assert!(!c.intercept.is_extra("dejavu"));
         assert!(!c.intercept.is_extra("a/b"));
 
+        assert!(c.intercept.is_enabled("mytool"));
         assert!(c.intercept.is_enabled("vitest"));
 
         let shims = c.intercept.enabled_shims();
-        assert!(shims.iter().any(|s| s == "vitest"));
+        assert!(shims.iter().any(|s| s == "mytool"));
         assert!(shims.iter().any(|s| s == "make"));
-        assert_eq!(
-            shims.iter().filter(|s| s.as_str() == "git").count(),
-            1,
-            "builtin listed once even when repeated in extra"
-        );
+        for builtin in ["vitest", "git"] {
+            assert_eq!(
+                shims.iter().filter(|s| s.as_str() == builtin).count(),
+                1,
+                "builtin listed once even when repeated in extra"
+            );
+        }
         assert_eq!(shims.len(), SHIM_NAMES.len() + 2);
     }
 
     #[test]
     fn extra_parses_from_toml() {
         let c: Config =
-            toml::from_str("[intercept]\nextra = [\"vitest\", \"jest\"]\ngit = false\n").unwrap();
-        assert!(c.intercept.is_extra("vitest"));
-        assert!(c.intercept.is_extra("jest"));
+            toml::from_str("[intercept]\nextra = [\"mytool\", \"terraform\"]\ngit = false\n")
+                .unwrap();
+        assert!(c.intercept.is_extra("mytool"));
+        assert!(c.intercept.is_extra("terraform"));
         assert!(!c.intercept.git);
     }
 }

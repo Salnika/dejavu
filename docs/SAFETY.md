@@ -134,13 +134,18 @@ Optimized examples:
 
 ```bash
 pnpm test
+pnpm test:unit
 npm run lint
 yarn typecheck
 bun test
 tsc --noEmit
 eslint src
+vitest run
+jest
 pytest
 cargo test
+cargo clippy
+cargo check
 go test ./...
 rg "needle"
 grep -R needle src
@@ -162,7 +167,12 @@ git reset --hard
 git checkout main
 npm publish
 pnpm install
+pnpm run lint:fix
 eslint --fix
+cargo clippy --fix
+vitest            # bare vitest defaults to watch mode
+jest --watch
+jest -u           # snapshot update rewrites files
 docker build .
 docker compose up
 find . -delete

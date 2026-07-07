@@ -48,6 +48,9 @@ const GIT_MUTATING: &[&str] = &[
 ];
 /// JS package-manager scripts we optimize.
 const JS_SCRIPTS: &[&str] = &["test", "lint", "typecheck", "build"];
+/// Script-name prefixes we also optimize (`test:unit`, `lint:js`,
+/// `build:prod`, `typecheck:strict`, …).
+const JS_SCRIPT_PREFIXES: &[&str] = &["test:", "lint:", "build:", "typecheck:"];
 /// `find` primaries that cause side effects.
 const FIND_DANGEROUS: &[&str] = &[
     "-exec", "-execdir", "-delete", "-ok", "-okdir", "-fprint", "-fprintf", "-fls", "-fprint0",
@@ -81,6 +84,8 @@ pub fn classify(
         "npm" | "pnpm" | "yarn" | "bun" => classify_js(shim, args),
         "tsc" => classify_tsc(args),
         "eslint" => classify_eslint(args),
+        "vitest" => classify_vitest(args),
+        "jest" => classify_jest(args),
         "pytest" => classify_pytest(args),
         "cargo" => classify_cargo(args),
         "go" => classify_go(args),
@@ -139,7 +144,7 @@ fn classify_js(shim: &str, args: &[String]) -> ExecMode {
     if is_known_interactive(shim, Some(script)) {
         return Passthrough(R::Interactive);
     }
-    if JS_SCRIPTS.contains(&script) {
+    if js_script_whitelisted(script) {
         Optimize {
             family: Family::Validation,
             command_key: build_key(&format!("validation:{shim}"), &key_tokens),
@@ -147,6 +152,24 @@ fn classify_js(shim: &str, args: &[String]) -> ExecMode {
     } else {
         Passthrough(R::UnsupportedSubcommand)
     }
+}
+
+/// Exact whitelist names, plus `test:*`/`lint:*`/`build:*`/`typecheck:*`
+/// variants — unless a `:`-segment names a watch/serve/mutating flavor
+/// (`test:watch`, `lint:fix`, `build:dev` stay passthrough; `test:fixtures`
+/// is fine).
+fn js_script_whitelisted(script: &str) -> bool {
+    if JS_SCRIPTS.contains(&script) {
+        return true;
+    }
+    JS_SCRIPT_PREFIXES.iter().any(|p| script.starts_with(p))
+        && !script.split(':').any(|seg| {
+            seg == "fix"
+                || seg == "dev"
+                || seg == "serve"
+                || seg == "start"
+                || seg.starts_with("watch")
+        })
 }
 
 fn classify_tsc(args: &[String]) -> ExecMode {
@@ -179,6 +202,43 @@ fn classify_pytest(args: &[String]) -> ExecMode {
     }
 }
 
+/// `vitest` defaults to watch mode in a dev terminal, so only the explicit
+/// single-run forms (`vitest run …`, `--run`) are optimized.
+fn classify_vitest(args: &[String]) -> ExecMode {
+    if has_watch_flag(args) {
+        return Passthrough(R::Interactive);
+    }
+    // Snapshot updates rewrite files in the repo.
+    if args.iter().any(|a| a == "-u" || a == "--update") {
+        return Passthrough(R::SideEffecting);
+    }
+    let explicit_run =
+        matches!(first_positional(args), Some((_, "run"))) || args.iter().any(|a| a == "--run");
+    if explicit_run {
+        Optimize {
+            family: Family::Validation,
+            command_key: build_key("validation:vitest", &drop_noise(args)),
+        }
+    } else {
+        // Bare `vitest` / `vitest watch` / `vitest dev` live-rerun on changes.
+        Passthrough(R::Interactive)
+    }
+}
+
+/// `jest` runs once by default; watch and snapshot-update forms pass through.
+fn classify_jest(args: &[String]) -> ExecMode {
+    if has_watch_flag(args) {
+        return Passthrough(R::Interactive);
+    }
+    if args.iter().any(|a| a == "-u" || a == "--updateSnapshot") {
+        return Passthrough(R::SideEffecting);
+    }
+    Optimize {
+        family: Family::Validation,
+        command_key: build_key("validation:jest", &drop_noise(args)),
+    }
+}
+
 fn classify_cargo(args: &[String]) -> ExecMode {
     // Skip a leading `+toolchain` selector.
     let rest: &[String] = match args.first() {
@@ -190,6 +250,24 @@ fn classify_cargo(args: &[String]) -> ExecMode {
             family: Family::Validation,
             command_key: build_key("validation:cargo:test", &drop_noise(&rest[idx + 1..])),
         },
+        Some((idx, "check")) => Optimize {
+            family: Family::Validation,
+            command_key: build_key("validation:cargo:check", &drop_noise(&rest[idx + 1..])),
+        },
+        Some((idx, "clippy")) => {
+            // `cargo clippy --fix` rewrites source files.
+            if rest.iter().any(|a| a == "--fix") {
+                Passthrough(R::SideEffecting)
+            } else {
+                Optimize {
+                    family: Family::Validation,
+                    command_key: build_key(
+                        "validation:cargo:clippy",
+                        &drop_noise(&rest[idx + 1..]),
+                    ),
+                }
+            }
+        }
         _ => Passthrough(R::UnsupportedSubcommand),
     }
 }
@@ -434,11 +512,11 @@ mod tests {
     #[test]
     fn extra_commands_classify_as_generic_validation() {
         let mut cfg = Config::default();
-        cfg.intercept.extra = vec!["vitest".to_string()];
+        cfg.intercept.extra = vec!["mytool".to_string()];
 
         // Optimized with a validation key.
         let c = classify(
-            "vitest",
+            "mytool",
             &["run".to_string(), "--color=always".to_string()],
             &cfg,
             false,
@@ -451,14 +529,14 @@ mod tests {
                 command_key,
             } => {
                 assert_eq!(*family, Family::Validation);
-                assert_eq!(command_key, "validation:vitest:run");
+                assert_eq!(command_key, "validation:mytool:run");
             }
             other => panic!("expected Optimize, got {other:?}"),
         }
 
         // Watch mode passes through.
         let c = classify(
-            "vitest",
+            "mytool",
             &["--watch".to_string()],
             &cfg,
             false,
@@ -561,12 +639,92 @@ mod tests {
     }
 
     #[test]
-    fn cargo_go_only_test_optimized() {
+    fn cargo_go_validation_subcommands() {
         assert!(is_opt(&mode("cargo", &["test"])));
         assert!(is_opt(&mode("cargo", &["+nightly", "test"])));
+        assert!(is_opt(&mode("cargo", &["check"])));
+        assert!(is_opt(&mode("cargo", &["check", "--all-targets"])));
+        assert!(is_opt(&mode("cargo", &["clippy"])));
+        assert!(is_opt(&mode("cargo", &["clippy", "--", "-D", "warnings"])));
+        assert_eq!(
+            key(&mode("cargo", &["check"])),
+            "validation:cargo:check:default"
+        );
         assert!(!is_opt(&mode("cargo", &["build"])));
+        assert!(!is_opt(&mode("cargo", &["publish"])));
+        // `clippy --fix` rewrites source files.
+        assert!(matches!(
+            mode("cargo", &["clippy", "--fix"]),
+            Passthrough(R::SideEffecting)
+        ));
         assert!(is_opt(&mode("go", &["test", "./..."])));
         assert!(!is_opt(&mode("go", &["build"])));
+    }
+
+    #[test]
+    fn vitest_only_explicit_run_optimized() {
+        assert!(is_opt(&mode("vitest", &["run"])));
+        assert!(is_opt(&mode("vitest", &["run", "src/session"])));
+        assert!(is_opt(&mode("vitest", &["related", "--run", "src/a.ts"])));
+        assert_eq!(key(&mode("vitest", &["run"])), "validation:vitest:run");
+        // Bare vitest defaults to watch mode in a dev terminal.
+        assert!(matches!(mode("vitest", &[]), Passthrough(R::Interactive)));
+        assert!(matches!(
+            mode("vitest", &["watch"]),
+            Passthrough(R::Interactive)
+        ));
+        assert!(matches!(
+            mode("vitest", &["run", "--watch"]),
+            Passthrough(R::Interactive)
+        ));
+        // Snapshot updates rewrite files.
+        assert!(matches!(
+            mode("vitest", &["run", "-u"]),
+            Passthrough(R::SideEffecting)
+        ));
+    }
+
+    #[test]
+    fn jest_optimized_except_watch_and_snapshot_updates() {
+        assert!(is_opt(&mode("jest", &[])));
+        assert!(is_opt(&mode("jest", &["src/session"])));
+        assert_eq!(key(&mode("jest", &[])), "validation:jest:default");
+        assert!(matches!(
+            mode("jest", &["--watch"]),
+            Passthrough(R::Interactive)
+        ));
+        assert!(matches!(
+            mode("jest", &["--watchAll"]),
+            Passthrough(R::Interactive)
+        ));
+        assert!(matches!(
+            mode("jest", &["-u"]),
+            Passthrough(R::SideEffecting)
+        ));
+        assert!(matches!(
+            mode("jest", &["--updateSnapshot"]),
+            Passthrough(R::SideEffecting)
+        ));
+    }
+
+    #[test]
+    fn js_script_prefixes_optimized_dangerous_variants_passthrough() {
+        // `test:*` / `lint:*` / `build:*` / `typecheck:*` variants optimize.
+        assert!(is_opt(&mode("pnpm", &["test:unit"])));
+        assert!(is_opt(&mode("pnpm", &["run", "test:e2e"])));
+        assert!(is_opt(&mode("npm", &["run", "lint:js"])));
+        assert!(is_opt(&mode("yarn", &["build:prod"])));
+        assert!(is_opt(&mode("pnpm", &["run", "typecheck:strict"])));
+        // Segment equality spares look-alikes…
+        assert!(is_opt(&mode("pnpm", &["run", "test:fixtures"])));
+        // …but watch / fix / dev / serve / start variants stay passthrough.
+        assert!(!is_opt(&mode("pnpm", &["run", "test:watch"])));
+        assert!(!is_opt(&mode("pnpm", &["run", "lint:fix"])));
+        assert!(!is_opt(&mode("pnpm", &["run", "build:dev"])));
+        assert!(!is_opt(&mode("npm", &["run", "build:serve"])));
+        assert!(!is_opt(&mode("pnpm", &["run", "test:watch-unit"])));
+        // Unrelated script names are still unsupported.
+        assert!(!is_opt(&mode("pnpm", &["run", "deploy:prod"])));
     }
 
     #[test]
