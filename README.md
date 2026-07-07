@@ -51,7 +51,7 @@ brew install dejavu
 npm / npx (the command is still `dejavu`):
 
 ```bash
-npx @salnika/dejavu start -- codex   # no install
+npx @salnika/dejavu start codex   # no install
 npm install -g @salnika/dejavu       # or install globally
 ```
 
@@ -77,16 +77,16 @@ More detail: [docs/INSTALL.md](docs/INSTALL.md). Maintainers: [docs/RELEASING.md
 
 ```bash
 cd my-project
-dejavu start -- codex
+dejavu start codex
 ```
 
 Use the same pattern for other terminal agents:
 
 ```bash
-dejavu start -- claude
-dejavu start -- aider
-dejavu start -- opencode
-dejavu start -- gemini
+dejavu start claude
+dejavu start aider
+dejavu start opencode
+dejavu start gemini
 ```
 
 Inside that session, the agent keeps using ordinary commands:
