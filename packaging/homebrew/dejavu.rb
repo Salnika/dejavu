@@ -8,25 +8,25 @@
 class Dejavu < Formula
   desc "Stop showing coding agents the same command output twice"
   homepage "https://github.com/Salnika/dejavu"
-  version "0.1.0"
+  version "0.2.1"
   license "MIT"
 
   on_macos do
     if Hardware::CPU.arm?
-      url "https://github.com/Salnika/dejavu/releases/download/v0.1.0/dejavu-aarch64-apple-darwin.tar.gz"
+      url "https://github.com/Salnika/dejavu/releases/download/v0.2.1/dejavu-aarch64-apple-darwin.tar.gz"
       sha256 "<SHA256_MACOS_ARM>"
     else
-      url "https://github.com/Salnika/dejavu/releases/download/v0.1.0/dejavu-x86_64-apple-darwin.tar.gz"
+      url "https://github.com/Salnika/dejavu/releases/download/v0.2.1/dejavu-x86_64-apple-darwin.tar.gz"
       sha256 "<SHA256_MACOS_X86>"
     end
   end
 
   on_linux do
     if Hardware::CPU.arm?
-      url "https://github.com/Salnika/dejavu/releases/download/v0.1.0/dejavu-aarch64-unknown-linux-gnu.tar.gz"
+      url "https://github.com/Salnika/dejavu/releases/download/v0.2.1/dejavu-aarch64-unknown-linux-gnu.tar.gz"
       sha256 "<SHA256_LINUX_ARM>"
     else
-      url "https://github.com/Salnika/dejavu/releases/download/v0.1.0/dejavu-x86_64-unknown-linux-gnu.tar.gz"
+      url "https://github.com/Salnika/dejavu/releases/download/v0.2.1/dejavu-x86_64-unknown-linux-gnu.tar.gz"
       sha256 "<SHA256_LINUX_X86>"
     end
   end
@@ -36,6 +36,6 @@ class Dejavu < Formula
   end
 
   test do
-    assert_match "dejavu 0.1.0", shell_output("#{bin}/dejavu --version")
+    assert_match "dejavu 0.2.1", shell_output("#{bin}/dejavu --version")
   end
 end
